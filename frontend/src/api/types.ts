@@ -9,6 +9,7 @@ export interface User {
   active: boolean;
   joined_date: string;
   bio: string;
+  has_login: boolean;
 }
 
 export interface Mandate {

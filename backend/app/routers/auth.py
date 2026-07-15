@@ -8,6 +8,12 @@ from app.database import get_db
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
+def _user_to_out(user: models.User) -> schemas.UserOut:
+    item = schemas.UserOut.model_validate(user)
+    item.has_login = bool(user.hashed_password)
+    return item
+
+
 def get_current_user(request: Request, db: Session = Depends(get_db)) -> models.User:
     user_id = getattr(request.state, "user_id", None)
     if user_id is None:
@@ -51,7 +57,7 @@ def bootstrap(body: schemas.BootstrapRequest, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(user)
     token = create_access_token(user.id, user.email)
-    return schemas.TokenResponse(access_token=token, user=user)
+    return schemas.TokenResponse(access_token=token, user=_user_to_out(user))
 
 
 @router.post("/login", response_model=schemas.TokenResponse)
@@ -62,12 +68,12 @@ def login(body: schemas.LoginRequest, db: Session = Depends(get_db)):
     if not user.active:
         raise HTTPException(status_code=403, detail="Ce compte est désactivé.")
     token = create_access_token(user.id, user.email)
-    return schemas.TokenResponse(access_token=token, user=user)
+    return schemas.TokenResponse(access_token=token, user=_user_to_out(user))
 
 
 @router.get("/me", response_model=schemas.UserOut)
 def me(current_user: models.User = Depends(get_current_user)):
-    return current_user
+    return _user_to_out(current_user)
 
 
 @router.post("/change-password")

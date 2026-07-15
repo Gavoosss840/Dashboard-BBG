@@ -19,6 +19,11 @@ class UserOut(ORMBase):
     active: bool
     joined_date: dt.date
     bio: str
+    has_login: bool = False
+
+
+class SetPasswordRequest(BaseModel):
+    new_password: str
 
 
 # ---------- Auth ----------

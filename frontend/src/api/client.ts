@@ -186,6 +186,8 @@ export const api = {
   updateUser: (id: number, payload: Partial<UserInput>) =>
     request<User>(`/api/users/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   deleteUser: (id: number) => request<{ ok: boolean }>(`/api/users/${id}`, { method: "DELETE" }),
+  setUserPassword: (id: number, new_password: string) =>
+    request<User>(`/api/users/${id}/password`, { method: "PATCH", body: JSON.stringify({ new_password }) }),
 
   allocation: (ccy: string) => request<AllocationResult>(`/api/allocation?ccy=${ccy}`),
 

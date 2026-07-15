@@ -29,7 +29,7 @@ export function UserForm({
   onCancel,
 }: {
   initial?: User;
-  onSubmit: (data: UserInput) => Promise<void>;
+  onSubmit: (data: UserInput, password?: string) => Promise<void>;
   onCancel: () => void;
 }) {
   const [form, setForm] = useState<UserInput>(
@@ -47,6 +47,8 @@ export function UserForm({
         }
       : DEFAULTS
   );
+  const [password, setPassword] = useState("");
+  const [passwordError, setPasswordError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   function set<K extends keyof UserInput>(key: K, value: UserInput[K]) {
@@ -55,9 +57,14 @@ export function UserForm({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setPasswordError(null);
+    if (password && password.length < 8) {
+      setPasswordError("Le mot de passe doit faire au moins 8 caractères.");
+      return;
+    }
     setBusy(true);
     try {
-      await onSubmit({ ...form, avatar_initials: form.avatar_initials || initials(form.name) });
+      await onSubmit({ ...form, avatar_initials: form.avatar_initials || initials(form.name) }, password || undefined);
     } finally {
       setBusy(false);
     }
@@ -91,6 +98,18 @@ export function UserForm({
         </Field>
         <Field label="Bio" span2>
           <textarea className={inputClass} rows={2} value={form.bio} onChange={(e) => set("bio", e.target.value)} />
+        </Field>
+        <Field label={initial ? "Nouveau mot de passe (laisser vide pour ne pas changer)" : "Mot de passe (optionnel, active la connexion)"} span2>
+          <input
+            type="password"
+            minLength={password ? 8 : undefined}
+            className={inputClass}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="new-password"
+            placeholder={initial?.has_login ? "Connexion déjà activée" : "Aucune connexion pour l'instant"}
+          />
+          {passwordError && <span className="mt-1 block text-xs text-[var(--status-critical)]">{passwordError}</span>}
         </Field>
       </FormGrid>
       <FormActions onCancel={onCancel} busy={busy} submitLabel={initial ? "Enregistrer" : "Créer l'utilisateur"} />

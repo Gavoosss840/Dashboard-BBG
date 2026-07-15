@@ -13,11 +13,17 @@ export function UsersPage() {
   const { data, loading, error, reload } = useApi(() => api.users(), []);
   const [modal, setModal] = useState<{ type: "new" } | { type: "edit"; user: User } | null>(null);
 
-  async function handleSubmit(payload: UserInput) {
+  async function handleSubmit(payload: UserInput, password?: string) {
+    let userId: number;
     if (modal?.type === "edit") {
       await api.updateUser(modal.user.id, payload);
+      userId = modal.user.id;
     } else {
-      await api.createUser(payload);
+      const created = await api.createUser(payload);
+      userId = created.id;
+    }
+    if (password) {
+      await api.setUserPassword(userId, password);
     }
     setModal(null);
     reload();
@@ -64,9 +70,20 @@ export function UsersPage() {
                   <div className="min-w-0">
                     <div className="font-medium">{u.name}</div>
                     <div className="text-xs text-[var(--text-muted)]">{u.title}</div>
-                    <span className="mt-1 inline-block rounded bg-white/5 px-1.5 py-0.5 text-xs capitalize text-[var(--text-secondary)]">
-                      {u.role}
-                    </span>
+                    <div className="mt-1 flex gap-1.5">
+                      <span className="inline-block rounded bg-white/5 px-1.5 py-0.5 text-xs capitalize text-[var(--text-secondary)]">
+                        {u.role}
+                      </span>
+                      <span
+                        className="inline-block rounded px-1.5 py-0.5 text-xs"
+                        style={{
+                          background: u.has_login ? "rgba(12,163,12,0.15)" : "rgba(137,135,129,0.18)",
+                          color: u.has_login ? "var(--status-good)" : "var(--text-muted)",
+                        }}
+                      >
+                        {u.has_login ? "Connexion activée" : "Pas de connexion"}
+                      </span>
+                    </div>
                   </div>
                 </div>
                 <div className="flex shrink-0 gap-1.5">
