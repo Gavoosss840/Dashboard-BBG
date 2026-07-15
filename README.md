@@ -9,7 +9,23 @@ données de démonstration (mock) en attendant la connexion Interactive Brokers.
 - **Backend**: FastAPI + SQLAlchemy + SQLite (`backend/`)
 - **Frontend**: React + TypeScript + Vite + Tailwind v4 + Recharts (`frontend/`)
 
-## Lancer en local
+## Lancer en local — Docker (recommandé)
+
+```bash
+docker compose up --build
+```
+
+- Frontend: http://localhost:3000
+- Backend / API: http://localhost:8000 (docs interactives sur http://localhost:8000/docs)
+
+La base SQLite vit dans un volume Docker nommé (`backend-data`) : les données
+persistent entre les redémarrages (`docker compose down` sans `-v` conserve le
+volume ; `docker compose down -v` repart d'un jeu de données propre).
+
+Pour reconstruire après une modification de code : `docker compose up --build`.
+Pour tout arrêter : `docker compose down`.
+
+## Lancer en local — sans Docker
 
 ```bash
 # Backend (http://localhost:8000)
