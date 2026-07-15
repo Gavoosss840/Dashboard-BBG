@@ -1,0 +1,236 @@
+export interface User {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+  title: string;
+  phone: string;
+  avatar_initials: string;
+  active: boolean;
+  joined_date: string;
+  bio: string;
+}
+
+export interface Mandate {
+  id: number;
+  client_id: number;
+  client_name: string;
+  mandate_type: string;
+  status: string;
+  signing_date: string;
+  renewal_date: string | null;
+  mgmt_fee_pct: number;
+  perf_fee_pct: number;
+  hurdle_rate_pct: number;
+  high_water_mark: number;
+  benchmark: string;
+  notice_period_days: number;
+  document_ref: string;
+}
+
+export interface Position {
+  id: number;
+  portfolio_id: number;
+  ticker: string;
+  name: string;
+  asset_class: string;
+  sector: string;
+  region: string;
+  currency: string;
+  quantity: number;
+  avg_cost: number;
+  last_price: number;
+  market_value: number;
+  unrealized_pnl: number;
+}
+
+export interface NavPoint {
+  date: string;
+  nav: number;
+}
+
+export interface Portfolio {
+  id: number;
+  ptf_id: string;
+  client_id: number;
+  base_currency: string;
+  strategy_bucket: string;
+  custodian: string;
+  inception_nav: number;
+  positions: Position[];
+  nav_history: NavPoint[];
+  market_value: number;
+  unrealized_pnl: number;
+  realized_pnl_ytd: number;
+  realized_pnl_since_inception: number;
+}
+
+export interface ClientSummary {
+  id: number;
+  name: string;
+  client_type: string;
+  status: string;
+  entry_date: string;
+  base_currency: string;
+  net_deposits: number;
+  current_nav: number;
+  pnl_ytd: number;
+  pnl_since_inception: number;
+}
+
+export interface Client extends ClientSummary {
+  country: string;
+  email: string;
+  phone: string;
+  risk_profile: string;
+  kyc_status: string;
+  relationship_manager: User | null;
+  notes: string;
+  total_deposits: number;
+  total_withdrawals: number;
+  mandates: Mandate[];
+  portfolios: Portfolio[];
+}
+
+export interface Transaction {
+  id: number;
+  client_id: number;
+  client_name: string;
+  transaction_type: string;
+  amount: number;
+  currency: string;
+  status: string;
+  issue_date: string;
+  due_date: string | null;
+  paid_date: string | null;
+  invoice_ref: string;
+  description: string;
+}
+
+export interface CrmContact {
+  id: number;
+  name: string;
+  contact_type: string;
+  stage: string;
+  source: string;
+  estimated_aum: number;
+  currency: string;
+  owner: User | null;
+  next_action: string;
+  next_action_date: string | null;
+  last_contact_date: string | null;
+  linked_client_id: number | null;
+  notes: string;
+}
+
+export interface WatchlistItem {
+  id: number;
+  ticker: string;
+  name: string;
+  asset_class: string;
+  currency: string;
+  last_price: number;
+  day_change_pct: number;
+  target_price: number | null;
+  added_by: User | null;
+  notes: string;
+  tags: string;
+}
+
+export interface NewsItem {
+  id: number;
+  headline: string;
+  summary: string;
+  source: string;
+  url: string;
+  published_at: string;
+  tickers: string;
+  sentiment: string;
+}
+
+export interface EarningsEvent {
+  id: number;
+  ticker: string;
+  company: string;
+  event_date: string;
+  time_of_day: string;
+  eps_estimate: number | null;
+  eps_actual: number | null;
+  revenue_estimate_m: number | null;
+  revenue_actual_m: number | null;
+  alert_enabled: boolean;
+  held_in_portfolio: boolean;
+}
+
+export interface ReferenceEntry {
+  id: number;
+  category: string;
+  title: string;
+  content: string;
+  tags: string;
+}
+
+export interface AllocationBucket {
+  id: number;
+  name: string;
+  aum: number;
+  currency: string;
+  lookback_days: number;
+  color: string;
+  realized_vol_annualized: number;
+  current_weight_pct: number;
+  target_weight_pct: number;
+  rebalance_delta_pct: number;
+}
+
+export interface AllocationResult {
+  buckets: AllocationBucket[];
+  total_aum: number;
+  method: string;
+  as_of: string;
+}
+
+export interface FXRate {
+  ccy: string;
+  rate_vs_usd: number;
+  updated_at: string;
+}
+
+export interface AggregatedHolding {
+  ticker: string;
+  name: string;
+  asset_class: string;
+  market_value: number;
+  weight_pct: number;
+}
+
+export interface GlobalPortfolio {
+  as_of: string;
+  currency: string;
+  total_market_value: number;
+  total_unrealized_pnl: number;
+  by_asset_class: Record<string, number>;
+  by_sector: Record<string, number>;
+  by_region: Record<string, number>;
+  by_currency: Record<string, number>;
+  by_strategy_bucket: Record<string, number>;
+  by_client: Record<string, number>;
+  holdings: AggregatedHolding[];
+}
+
+export interface Dashboard {
+  as_of: string;
+  total_aum: number;
+  currency: string;
+  num_clients: number;
+  num_active_mandates: number;
+  pnl_ytd: number;
+  pnl_since_inception: number;
+  aum_by_bucket: Record<string, number>;
+  aum_by_asset_class: Record<string, number>;
+  top_clients: ClientSummary[];
+  nav_history: NavPoint[];
+  pending_fees: number;
+  upcoming_earnings: number;
+  open_crm_leads: number;
+}

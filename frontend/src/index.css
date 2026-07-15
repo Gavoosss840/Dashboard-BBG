@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+  --surface-0: #0d0d0d;
+  --surface-1: #161615;
+  --surface-2: #1a1a19;
+  --surface-3: #202020;
+  --text-primary: #ffffff;
+  --text-secondary: #c3c2b7;
+  --text-muted: #898781;
+  --gridline: #2c2c2a;
+  --baseline: #383835;
+  --border: rgba(255, 255, 255, 0.1);
+
+  --series-1: #3987e5; /* blue */
+  --series-2: #008300; /* green */
+  --series-3: #d55181; /* magenta */
+  --series-4: #c98500; /* yellow */
+  --series-5: #199e70; /* aqua */
+  --series-6: #d95926; /* orange */
+  --series-7: #9085e9; /* violet */
+  --series-8: #e66767; /* red */
+
+  --status-good: #0ca30c;
+  --status-warning: #fab219;
+  --status-serious: #ec835a;
+  --status-critical: #d03b3b;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--surface-0);
+  color: var(--text-primary);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+table th:not(:last-child),
+table td:not(:last-child) {
+  padding-right: 16px;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--surface-3);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-track {
+  background: var(--surface-0);
+}
