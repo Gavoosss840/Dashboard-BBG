@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse
 
 from app.auth import decode_token
 from app.database import Base, SessionLocal, engine
+from app.migrate import ensure_schema
 from app.routers import (
     allocation,
     auth,
@@ -22,6 +23,7 @@ from app.routers import (
 from app.seed_data import seed
 
 Base.metadata.create_all(bind=engine)
+ensure_schema(engine, Base)
 
 with SessionLocal() as db:
     seed(db)

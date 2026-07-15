@@ -101,6 +101,14 @@ premier démarrage du backend (`app/seed_data.py`), avec seulement la
 configuration structurelle (voir plus haut). Supprimez le fichier pour repartir
 d'un état vide propre.
 
+**Migrations** : il n'y a pas d'Alembic ici — `app/migrate.py` ajoute
+automatiquement au démarrage les colonnes qu'un modèle a gagné depuis la
+dernière fois (ex: l'ajout du mot de passe, des frais d'entrée/sortie), sans
+jamais toucher aux données déjà présentes. Une mise à jour normale
+(`git pull` + relancer) suffit donc à absorber les évolutions de schéma — pas
+besoin de `docker compose down -v` à chaque fois, ce reset reste réservé à un
+vrai retour à zéro volontaire.
+
 ### Mode démo (données fictives)
 
 Pour recharger un jeu de données de démonstration (8 clients fictifs,
