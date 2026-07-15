@@ -4,11 +4,22 @@ cd /d "%~dp0"
 
 echo ============================================
 echo   Boulet Capital - Internal Terminal
-echo   Demarrage en cours (peut prendre 1-2 min
-echo   la premiere fois)...
 echo ============================================
 echo.
 
+if exist ".git" (
+  echo Recuperation des dernieres mises a jour ^(git pull^)...
+  for /f "delims=" %%b in ('git rev-parse --abbrev-ref HEAD 2^>nul') do set BRANCH=%%b
+  git pull origin %BRANCH%
+  if errorlevel 1 (
+    echo.
+    echo ATTENTION : le git pull a echoue ^(pas de connexion, ou conflit local^).
+    echo On continue avec le code deja present sur cette machine.
+  )
+  echo.
+)
+
+echo Demarrage en cours ^(peut prendre 1-2 min la premiere fois, ou apres une mise a jour^)...
 docker compose up --build -d
 if errorlevel 1 (
   echo.

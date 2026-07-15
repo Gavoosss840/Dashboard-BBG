@@ -35,10 +35,18 @@ source pourrait forger un token valide.
 ## Lancer en local — le plus simple
 
 Double-clique sur **`start.sh`** (Mac/Linux) ou **`start.bat`** (Windows) à la
-racine du repo — il faut avoir Docker Desktop installé et lancé au préalable.
-Le script construit les images, démarre les services en arrière-plan et ouvre
-http://localhost:3000 dans ton navigateur. Pour tout arrêter : double-clique
-sur `stop.sh` / `stop.bat`.
+racine du repo — il faut avoir Docker Desktop **et Git** installés, et Docker
+Desktop lancé au préalable. Le script :
+
+1. récupère automatiquement les dernières mises à jour (`git pull`) — pas
+   besoin d'ouvrir VS Code ni un terminal pour ça,
+2. construit les images si besoin,
+3. démarre les services en arrière-plan,
+4. ouvre http://localhost:3000 dans ton navigateur.
+
+Pour tout arrêter : double-clique sur `stop.sh` / `stop.bat`. Si le `git pull`
+échoue (pas de connexion, conflit local), le script continue quand même avec
+le code déjà présent sur la machine plutôt que de bloquer.
 
 > Sur Mac, un double-clic sur un `.sh` peut l'ouvrir dans un éditeur de texte
 > plutôt que l'exécuter (dépend des réglages du Finder) — dans ce cas,
