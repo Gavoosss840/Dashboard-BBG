@@ -107,6 +107,54 @@ export interface Transaction {
   description: string;
 }
 
+export interface FeeEnginePreview {
+  mandate_id: number;
+  client_id: number;
+  client_name: string;
+  currency: string;
+  period_start: string;
+  period_end: string;
+  current_nav: number;
+  mgmt_fee_pct: number;
+  accrued_mgmt_fee: number;
+  high_water_mark: number;
+  hurdle_rate_pct: number;
+  perf_fee_pct: number;
+  accrued_perf_fee: number;
+  mgmt_fee_invoiceable: boolean;
+  perf_fee_crystallizable: boolean;
+}
+
+export interface ComplianceDocument {
+  id: number;
+  client_id: number;
+  client_name: string;
+  doc_type: string;
+  issued_date: string | null;
+  expiry_date: string | null;
+  notes: string;
+  status: "valid" | "expiring_soon" | "expired" | "missing";
+  days_to_expiry: number | null;
+}
+
+export interface MandateRenewal {
+  mandate_id: number;
+  client_id: number;
+  client_name: string;
+  renewal_date: string;
+  days_to_renewal: number;
+  notice_period_days: number;
+}
+
+export interface ComplianceSummary {
+  as_of: string;
+  valid: number;
+  expiring_soon: number;
+  expired: number;
+  missing: number;
+  upcoming_mandate_renewals: MandateRenewal[];
+}
+
 export interface CrmContact {
   id: number;
   name: string;

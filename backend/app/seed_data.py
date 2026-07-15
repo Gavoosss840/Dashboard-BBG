@@ -29,6 +29,15 @@ FX_RATES_VS_USD = {
 }
 
 
+def _next_renewal_date(entry_date: dt.date, as_of: dt.date, cycle_years: int = 2) -> dt.date:
+    """Mandate renewals recur every `cycle_years`; roll forward to the next one still ahead of as_of."""
+    day = min(entry_date.day, 28)
+    renewal = dt.date(entry_date.year + cycle_years, entry_date.month, day)
+    while renewal <= as_of:
+        renewal = dt.date(renewal.year + cycle_years, renewal.month, day)
+    return renewal
+
+
 def _bridged_walk(start_value: float, end_value: float, n_days: int, daily_vol: float) -> list[float]:
     """Random walk from start_value to end_value with a plausible daily wiggle."""
     if n_days <= 1:
@@ -166,7 +175,7 @@ def seed(db: Session) -> None:
             mandate_type="discretionary",
             status="active",
             signing_date=cdef["entry_date"],
-            renewal_date=dt.date(cdef["entry_date"].year + 2, cdef["entry_date"].month, min(cdef["entry_date"].day, 28)) if cdef["entry_date"].year + 2 <= 2027 else None,
+            renewal_date=_next_renewal_date(cdef["entry_date"], AS_OF),
             mgmt_fee_pct=mgmt_fee,
             perf_fee_pct=perf_fee,
             hurdle_rate_pct=random.choice([0.0, 0.0, 3.0, 5.0]),
@@ -259,19 +268,36 @@ def seed(db: Session) -> None:
                 description=f"Frais de gestion T{((q_date.month - 1) // 3) + 1} {q_date.year}",
             ))
             approx_nav *= (1 + cdef["ann_return"] / 4)
-
-        if target_end_value > cdef["deposit"]:
-            perf_gain = target_end_value - cdef["deposit"]
-            perf_amount = round(perf_gain * (perf_fee / 100), 2)
-            db.add(models.Transaction(
-                client_id=client.id, transaction_type="performance_fee", amount=perf_amount,
-                currency=cdef["base_currency"], status="draft", issue_date=AS_OF,
-                due_date=AS_OF + dt.timedelta(days=30), paid_date=None,
-                invoice_ref=f"INV-PERF-{client.id:04d}-{AS_OF.year}",
-                description=f"Performance fee (estimée, {AS_OF.year})",
-            ))
+        # Performance fees are no longer pre-seeded: the fee engine
+        # (services/fee_engine.py) computes and crystallizes them live
+        # against each mandate's High-Water Mark.
 
     db.flush()
+
+    # ---------------- Compliance documents (KYC/AML/suitability) ----------------
+    doc_types = [
+        ("KYC - Identité", 365 * 2),
+        ("Justificatif de domicile", 365),
+        ("FATCA/CRS - Auto-certification", 365 * 3),
+        ("Questionnaire d'adéquation (suitability)", 365 * 2),
+        ("Screening AML/PEP", 180),
+    ]
+    for client in clients:
+        for doc_type, validity_days in doc_types:
+            issued = client.entry_date + dt.timedelta(days=random.randint(0, 30))
+            expiry = issued + dt.timedelta(days=validity_days)
+            # Skew a few documents into "expiring soon" / "expired" / "missing" for a realistic tracker.
+            roll = random.random()
+            if roll < 0.12:
+                expiry = AS_OF - dt.timedelta(days=random.randint(1, 60))  # expired
+            elif roll < 0.28:
+                expiry = AS_OF + dt.timedelta(days=random.randint(1, 45))  # expiring soon
+            elif roll < 0.35:
+                issued = None
+                expiry = None  # missing
+            db.add(models.ComplianceDocument(
+                client_id=client.id, doc_type=doc_type, issued_date=issued, expiry_date=expiry, notes="",
+            ))
 
     # ---------------- CRM pipeline ----------------
     crm_defs = [

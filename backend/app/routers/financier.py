@@ -7,7 +7,9 @@ from sqlalchemy.orm import Session, joinedload
 from app import models, schemas
 from app.database import get_db
 from app.deps import fx_rates, target_currency
+from app.services import fee_engine
 from app.services.fx import convert
+from app.utils import AS_OF
 
 router = APIRouter(prefix="/api/financier", tags=["financier"])
 
@@ -66,11 +68,114 @@ def financier_summary(
     overdue = sum(
         convert(t.amount, t.currency, ccy, rates)
         for t in txns
-        if t.status in ("invoiced", "pending") and t.due_date and t.due_date < dt.date.today()
+        if t.status in ("invoiced", "pending") and t.due_date and t.due_date < AS_OF
     )
     paid_ytd = sum(
         convert(t.amount, t.currency, ccy, rates)
         for t in txns
-        if t.status == "paid" and t.paid_date and t.paid_date.year == 2026
+        if t.status == "paid" and t.paid_date and t.paid_date.year == AS_OF.year
     )
     return {"currency": ccy, "pending": pending, "overdue": overdue, "paid_ytd": paid_ytd}
+
+
+def _mandate_query(db: Session):
+    return (
+        db.query(models.Mandate)
+        .options(
+            joinedload(models.Mandate.client).joinedload(models.Client.portfolios).joinedload(models.Portfolio.nav_history)
+        )
+        .filter(models.Mandate.status == "active")
+    )
+
+
+@router.get("/fee-engine/preview", response_model=list[schemas.FeeEnginePreviewOut])
+def fee_engine_preview(
+    db: Session = Depends(get_db),
+    ccy: str = Depends(target_currency),
+    rates: dict = Depends(fx_rates),
+):
+    mandates = _mandate_query(db).all()
+    all_txns = db.query(models.Transaction).all()
+    out = []
+    for m in mandates:
+        client_txns = [t for t in all_txns if t.client_id == m.client_id]
+        calc = fee_engine.preview(m.client, m, client_txns, rates, ccy, AS_OF)
+        out.append(
+            schemas.FeeEnginePreviewOut(
+                mandate_id=m.id,
+                client_id=m.client_id,
+                client_name=m.client.name,
+                currency=ccy,
+                period_start=calc["period_start"],
+                period_end=calc["period_end"],
+                current_nav=calc["current_nav"],
+                mgmt_fee_pct=m.mgmt_fee_pct,
+                accrued_mgmt_fee=calc["accrued_mgmt_fee"],
+                high_water_mark=convert(m.high_water_mark, m.client.base_currency, ccy, rates),
+                hurdle_rate_pct=m.hurdle_rate_pct,
+                perf_fee_pct=m.perf_fee_pct,
+                accrued_perf_fee=calc["accrued_perf_fee"],
+                mgmt_fee_invoiceable=calc["mgmt_fee_invoiceable"],
+                perf_fee_crystallizable=calc["perf_fee_crystallizable"],
+            )
+        )
+    return out
+
+
+@router.post("/fee-engine/generate/{mandate_id}", response_model=schemas.TransactionOut)
+def generate_management_fee(mandate_id: int, db: Session = Depends(get_db), rates: dict = Depends(fx_rates)):
+    mandate = _mandate_query(db).filter(models.Mandate.id == mandate_id).first()
+    if not mandate:
+        raise HTTPException(status_code=404, detail="Mandate not found")
+    client_txns = db.query(models.Transaction).filter(models.Transaction.client_id == mandate.client_id).all()
+    calc = fee_engine.preview(mandate.client, mandate, client_txns, rates, mandate.client.base_currency, AS_OF)
+    if not calc["mgmt_fee_invoiceable"]:
+        raise HTTPException(status_code=400, detail="Aucun frais de gestion à facturer sur la période")
+
+    txn = models.Transaction(
+        client_id=mandate.client_id,
+        transaction_type="management_fee",
+        amount=round(calc["mgmt_fee_base_ccy"], 2),
+        currency=mandate.client.base_currency,
+        status="draft",
+        issue_date=AS_OF,
+        due_date=AS_OF + dt.timedelta(days=30),
+        invoice_ref=f"INV-MGMT-{mandate.client_id:04d}-{AS_OF.strftime('%Y%m%d')}",
+        description=f"Frais de gestion — période du {calc['period_start']} au {calc['period_end']} (généré par le fee engine)",
+    )
+    db.add(txn)
+    db.commit()
+    db.refresh(txn)
+    item = schemas.TransactionOut.model_validate(txn)
+    item.client_name = mandate.client.name
+    return item
+
+
+@router.post("/fee-engine/crystallize/{mandate_id}", response_model=schemas.TransactionOut)
+def crystallize_performance_fee(mandate_id: int, db: Session = Depends(get_db), rates: dict = Depends(fx_rates)):
+    mandate = _mandate_query(db).filter(models.Mandate.id == mandate_id).first()
+    if not mandate:
+        raise HTTPException(status_code=404, detail="Mandate not found")
+    client_txns = db.query(models.Transaction).filter(models.Transaction.client_id == mandate.client_id).all()
+    calc = fee_engine.preview(mandate.client, mandate, client_txns, rates, mandate.client.base_currency, AS_OF)
+    if not calc["perf_fee_crystallizable"]:
+        raise HTTPException(status_code=400, detail="Aucune performance fee à cristalliser (NAV sous le HWM/hurdle)")
+
+    txn = models.Transaction(
+        client_id=mandate.client_id,
+        transaction_type="performance_fee",
+        amount=round(calc["perf_fee_base_ccy"], 2),
+        currency=mandate.client.base_currency,
+        status="draft",
+        issue_date=AS_OF,
+        due_date=AS_OF + dt.timedelta(days=30),
+        invoice_ref=f"INV-PERF-{mandate.client_id:04d}-{AS_OF.strftime('%Y%m%d')}",
+        description=f"Performance fee cristallisée au {AS_OF} (nouveau HWM: {calc['nav_end_base_ccy']:.2f} {mandate.client.base_currency})",
+    )
+    db.add(txn)
+    mandate.high_water_mark = calc["nav_end_base_ccy"]
+    db.commit()
+    db.refresh(txn)
+    item = schemas.TransactionOut.model_validate(txn)
+    item.client_name = mandate.client.name
+    return item

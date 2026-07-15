@@ -131,6 +131,24 @@ class TransactionOut(ORMBase):
     description: str
 
 
+class FeeEnginePreviewOut(BaseModel):
+    mandate_id: int
+    client_id: int
+    client_name: str
+    currency: str
+    period_start: dt.date
+    period_end: dt.date
+    current_nav: float
+    mgmt_fee_pct: float
+    accrued_mgmt_fee: float
+    high_water_mark: float
+    hurdle_rate_pct: float
+    perf_fee_pct: float
+    accrued_perf_fee: float
+    mgmt_fee_invoiceable: bool
+    perf_fee_crystallizable: bool
+
+
 # ---------- CRM ----------
 class CrmContactOut(ORMBase):
     id: int
@@ -186,6 +204,37 @@ class EarningsEventOut(ORMBase):
     revenue_actual_m: float | None
     alert_enabled: bool
     held_in_portfolio: bool
+
+
+# ---------- Compliance ----------
+class ComplianceDocumentOut(ORMBase):
+    id: int
+    client_id: int
+    client_name: str = ""
+    doc_type: str
+    issued_date: dt.date | None
+    expiry_date: dt.date | None
+    notes: str
+    status: str = "valid"
+    days_to_expiry: int | None = None
+
+
+class MandateRenewalOut(BaseModel):
+    mandate_id: int
+    client_id: int
+    client_name: str
+    renewal_date: dt.date
+    days_to_renewal: int
+    notice_period_days: int
+
+
+class ComplianceSummaryOut(BaseModel):
+    as_of: dt.date
+    valid: int
+    expiring_soon: int
+    expired: int
+    missing: int
+    upcoming_mandate_renewals: list[MandateRenewalOut]
 
 
 # ---------- Reference ----------

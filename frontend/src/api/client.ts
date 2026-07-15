@@ -2,9 +2,12 @@ import type {
   AllocationResult,
   Client,
   ClientSummary,
+  ComplianceDocument,
+  ComplianceSummary,
   CrmContact,
   Dashboard,
   EarningsEvent,
+  FeeEnginePreview,
   FXRate,
   GlobalPortfolio,
   Mandate,
@@ -58,6 +61,26 @@ export const api = {
     ),
 
   mandates: () => request<Mandate[]>(`/api/mandates`),
+
+  feeEnginePreview: (ccy: string) => request<FeeEnginePreview[]>(`/api/financier/fee-engine/preview?ccy=${ccy}`),
+  generateManagementFee: (mandateId: number) =>
+    request<Transaction>(`/api/financier/fee-engine/generate/${mandateId}`, { method: "POST" }),
+  crystallizePerformanceFee: (mandateId: number) =>
+    request<Transaction>(`/api/financier/fee-engine/crystallize/${mandateId}`, { method: "POST" }),
+
+  complianceDocuments: (params?: { status?: string; client_id?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.status) q.set("status", params.status);
+    if (params?.client_id) q.set("client_id", String(params.client_id));
+    const qs = q.toString();
+    return request<ComplianceDocument[]>(`/api/compliance/documents${qs ? `?${qs}` : ""}`);
+  },
+  complianceSummary: () => request<ComplianceSummary>(`/api/compliance/summary`),
+  renewDocument: (id: number, validity_days = 365) =>
+    request<ComplianceDocument>(`/api/compliance/documents/${id}/renew`, {
+      method: "PATCH",
+      body: JSON.stringify({ validity_days }),
+    }),
 
   crmContacts: () => request<CrmContact[]>(`/api/crm/contacts`),
   createCrmContact: (payload: Partial<CrmContact> & { name: string }) =>

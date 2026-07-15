@@ -268,3 +268,18 @@ class FXRate(Base):
     ccy: Mapped[str] = mapped_column(String(3), unique=True)
     rate_vs_usd: Mapped[float] = mapped_column(Float)
     updated_at: Mapped[dt.datetime] = mapped_column(DateTime, default=dt.datetime.utcnow)
+
+
+class ComplianceDocument(Base):
+    """A KYC/AML/suitability document tracked per client, with an expiry to renew."""
+
+    __tablename__ = "compliance_documents"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    client_id: Mapped[int] = mapped_column(ForeignKey("clients.id"))
+    doc_type: Mapped[str] = mapped_column(String(60))
+    issued_date: Mapped[dt.date | None] = mapped_column(Date, nullable=True)
+    expiry_date: Mapped[dt.date | None] = mapped_column(Date, nullable=True)
+    notes: Mapped[str] = mapped_column(Text, default="")
+
+    client: Mapped["Client"] = relationship()

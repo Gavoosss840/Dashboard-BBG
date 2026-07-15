@@ -37,6 +37,14 @@ def _nav_at_or_before(portfolio: models.Portfolio, target_date: dt.date) -> floa
     return val
 
 
+def portfolio_nav_at(portfolio: models.Portfolio, rates: dict, target_ccy: str, at: dt.date) -> float:
+    return fx.convert(_nav_at_or_before(portfolio, at), portfolio.base_currency, target_ccy, rates)
+
+
+def client_nav_at(client: models.Client, rates: dict, target_ccy: str, at: dt.date) -> float:
+    return sum(portfolio_nav_at(p, rates, target_ccy, at) for p in client.portfolios)
+
+
 def portfolio_current_nav(portfolio: models.Portfolio, rates: dict, target_ccy: str) -> float:
     if portfolio.nav_history:
         latest = max(portfolio.nav_history, key=lambda n: n.date)

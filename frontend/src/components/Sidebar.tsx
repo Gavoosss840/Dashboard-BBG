@@ -16,6 +16,7 @@ const SECTIONS: { label: string; items: { to: string; label: string }[] }[] = [
     label: "Gestion",
     items: [
       { to: "/financier", label: "Financier" },
+      { to: "/compliance", label: "Compliance" },
       { to: "/mandates", label: "Mandats" },
       { to: "/crm", label: "CRM" },
     ],

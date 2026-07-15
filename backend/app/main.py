@@ -5,6 +5,7 @@ from app.database import Base, SessionLocal, engine
 from app.routers import (
     allocation,
     clients,
+    compliance,
     crm,
     dashboard,
     financier,
@@ -43,6 +44,7 @@ app.include_router(reference.router)
 app.include_router(users.router)
 app.include_router(allocation.router)
 app.include_router(fx.router)
+app.include_router(compliance.router)
 
 
 @app.get("/api/health")

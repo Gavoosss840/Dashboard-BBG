@@ -9,7 +9,20 @@ données de démonstration (mock) en attendant la connexion Interactive Brokers.
 - **Backend**: FastAPI + SQLAlchemy + SQLite (`backend/`)
 - **Frontend**: React + TypeScript + Vite + Tailwind v4 + Recharts (`frontend/`)
 
-## Lancer en local — Docker (recommandé)
+## Lancer en local — le plus simple
+
+Double-clique sur **`start.sh`** (Mac/Linux) ou **`start.bat`** (Windows) à la
+racine du repo — il faut avoir Docker Desktop installé et lancé au préalable.
+Le script construit les images, démarre les services en arrière-plan et ouvre
+http://localhost:3000 dans ton navigateur. Pour tout arrêter : double-clique
+sur `stop.sh` / `stop.bat`.
+
+> Sur Mac, un double-clic sur un `.sh` peut l'ouvrir dans un éditeur de texte
+> plutôt que l'exécuter (dépend des réglages du Finder) — dans ce cas,
+> clique droit → "Ouvrir avec" → "Terminal", ou lance-le depuis un terminal :
+> `./start.sh`.
+
+## Lancer en local — Docker (manuel)
 
 ```bash
 docker compose up --build

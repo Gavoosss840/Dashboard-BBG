@@ -19,10 +19,34 @@ export function FinancierPage() {
     () => api.transactions(statusFilter === "all" ? undefined : { status: statusFilter }),
     [statusFilter]
   );
+  const feePreview = useApi(() => api.feeEnginePreview(currency), [currency]);
+  const [busyMandateId, setBusyMandateId] = useState<number | null>(null);
 
   async function markPaid(id: number) {
     await api.updateTransactionStatus(id, "paid", new Date().toISOString().slice(0, 10));
     txns.reload();
+  }
+
+  async function generateMgmtFee(mandateId: number) {
+    setBusyMandateId(mandateId);
+    try {
+      await api.generateManagementFee(mandateId);
+      feePreview.reload();
+      txns.reload();
+    } finally {
+      setBusyMandateId(null);
+    }
+  }
+
+  async function crystallize(mandateId: number) {
+    setBusyMandateId(mandateId);
+    try {
+      await api.crystallizePerformanceFee(mandateId);
+      feePreview.reload();
+      txns.reload();
+    } finally {
+      setBusyMandateId(null);
+    }
   }
 
   if (summary.loading || txns.loading) return <LoadingState />;
@@ -43,6 +67,65 @@ export function FinancierPage() {
         />
         <StatTile label="Encaissé cette année" value={formatMoney(summary.data.paid_ytd, currency, { compact: true })} tone="good" />
       </div>
+
+      <Card className="mt-4" title="Fee Engine" action={<span className="text-xs text-[var(--text-muted)]">Calcul live par mandat</span>}>
+        {feePreview.loading && <LoadingState />}
+        {feePreview.error && <ErrorState message={feePreview.error} />}
+        {feePreview.data && (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs uppercase text-[var(--text-muted)]">
+                <th className="pb-2">Client</th>
+                <th className="pb-2">Période accrual</th>
+                <th className="pb-2 text-right">NAV</th>
+                <th className="pb-2 text-right">Frais gestion accru</th>
+                <th className="pb-2"></th>
+                <th className="pb-2 text-right">HWM</th>
+                <th className="pb-2 text-right">Perf. fee accrue</th>
+                <th className="pb-2"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {feePreview.data.map((f) => (
+                <tr key={f.mandate_id} className="border-t border-white/5">
+                  <td className="py-2 font-medium">{f.client_name}</td>
+                  <td className="py-2 text-xs text-[var(--text-secondary)]">
+                    {formatDate(f.period_start)} → {formatDate(f.period_end)}
+                  </td>
+                  <td className="tabular py-2 text-right">{formatMoney(f.current_nav, currency, { compact: true })}</td>
+                  <td className="tabular py-2 text-right">
+                    {formatMoney(f.accrued_mgmt_fee, currency)}{" "}
+                    <span className="text-xs text-[var(--text-muted)]">({f.mgmt_fee_pct}%)</span>
+                  </td>
+                  <td className="py-2 text-right">
+                    <button
+                      disabled={!f.mgmt_fee_invoiceable || busyMandateId === f.mandate_id}
+                      onClick={() => generateMgmtFee(f.mandate_id)}
+                      className="rounded border border-white/10 px-2 py-1 text-xs text-[var(--text-secondary)] enabled:hover:border-[var(--series-1)] enabled:hover:text-[var(--series-1)] disabled:opacity-30"
+                    >
+                      Générer facture
+                    </button>
+                  </td>
+                  <td className="tabular py-2 text-right">{formatMoney(f.high_water_mark, currency, { compact: true })}</td>
+                  <td className="tabular py-2 text-right">
+                    {formatMoney(f.accrued_perf_fee, currency)}
+                    {f.hurdle_rate_pct > 0 && <span className="text-xs text-[var(--text-muted)]"> (hurdle {f.hurdle_rate_pct}%)</span>}
+                  </td>
+                  <td className="py-2 text-right">
+                    <button
+                      disabled={!f.perf_fee_crystallizable || busyMandateId === f.mandate_id}
+                      onClick={() => crystallize(f.mandate_id)}
+                      className="rounded border border-white/10 px-2 py-1 text-xs text-[var(--text-secondary)] enabled:hover:border-[var(--status-good)] enabled:hover:text-[var(--status-good)] disabled:opacity-30"
+                    >
+                      Cristalliser
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Card>
 
       <Card
         className="mt-4"
