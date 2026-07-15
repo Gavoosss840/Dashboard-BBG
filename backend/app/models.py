@@ -22,7 +22,8 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(120))
-    email: Mapped[str] = mapped_column(String(160))
+    email: Mapped[str] = mapped_column(String(160), unique=True)
+    hashed_password: Mapped[str | None] = mapped_column(String(200), nullable=True)
     role: Mapped[str] = mapped_column(String(40), default="associate")
     title: Mapped[str] = mapped_column(String(120), default="")
     phone: Mapped[str] = mapped_column(String(40), default="")
@@ -67,7 +68,9 @@ class Mandate(Base):
     status: Mapped[str] = mapped_column(String(20), default="active")
     signing_date: Mapped[dt.date] = mapped_column(Date)
     renewal_date: Mapped[dt.date | None] = mapped_column(Date, nullable=True)
+    entry_fee_pct: Mapped[float] = mapped_column(Float, default=0.0)
     mgmt_fee_pct: Mapped[float] = mapped_column(Float, default=1.5)
+    exit_fee_pct: Mapped[float] = mapped_column(Float, default=0.0)
     perf_fee_pct: Mapped[float] = mapped_column(Float, default=15.0)
     hurdle_rate_pct: Mapped[float] = mapped_column(Float, default=0.0)
     high_water_mark: Mapped[float] = mapped_column(Float, default=0.0)
@@ -268,6 +271,19 @@ class FXRate(Base):
     ccy: Mapped[str] = mapped_column(String(3), unique=True)
     rate_vs_usd: Mapped[float] = mapped_column(Float)
     updated_at: Mapped[dt.datetime] = mapped_column(DateTime, default=dt.datetime.utcnow)
+
+
+class AumTarget(Base):
+    """A manually-set AUM goal (overall or per period) tracked against actual AUM."""
+
+    __tablename__ = "aum_targets"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    label: Mapped[str] = mapped_column(String(120))
+    target_amount: Mapped[float] = mapped_column(Float)
+    currency: Mapped[str] = mapped_column(String(3), default="EUR")
+    target_date: Mapped[dt.date | None] = mapped_column(Date, nullable=True)
+    notes: Mapped[str] = mapped_column(Text, default="")
 
 
 class ComplianceDocument(Base):

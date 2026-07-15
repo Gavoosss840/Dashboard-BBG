@@ -7,6 +7,10 @@ services:
       - backend-data:/app/data
     environment:
       - DATABASE_URL=sqlite:////app/data/boulet_capital.db
+      # Change this to a long random string before exposing the platform
+      # beyond your own machine — it signs the login sessions.
+      - AUTH_SECRET_KEY=boulet-capital-dev-secret-change-me
+      # - SEED_DEMO_DATA=true
 
   frontend:
     build:

@@ -1,5 +1,10 @@
 import type {
   AllocationResult,
+  AumTarget,
+  AumTargetInput,
+  BootstrapStatus,
+  CashFlow,
+  CashFlowInput,
   Client,
   ClientInput,
   ClientSummary,
@@ -20,18 +25,43 @@ import type {
   PositionInput,
   ReferenceEntry,
   Transaction,
+  TokenResponse,
   User,
   UserInput,
   WatchlistItem,
 } from "./types";
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+const TOKEN_KEY = "boulet-capital-token";
+
+export function getToken(): string | null {
+  return sessionStorage.getItem(TOKEN_KEY);
+}
+
+export function setToken(token: string): void {
+  sessionStorage.setItem(TOKEN_KEY, token);
+}
+
+export function clearToken(): void {
+  sessionStorage.removeItem(TOKEN_KEY);
+}
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const token = getToken();
   const res = await fetch(`${BASE_URL}${path}`, {
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     ...options,
   });
+  // A 401 from login/bootstrap just means "wrong credentials" — let the caller
+  // handle it inline. Only treat 401s from everywhere else as "session expired".
+  const isAuthEndpoint = path.startsWith("/api/auth/login") || path.startsWith("/api/auth/bootstrap");
+  if (res.status === 401 && !isAuthEndpoint) {
+    clearToken();
+    window.dispatchEvent(new Event("auth:unauthorized"));
+  }
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`API error ${res.status} on ${path}: ${body}`);
@@ -41,6 +71,18 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  bootstrapStatus: () => request<BootstrapStatus>(`/api/auth/bootstrap-status`),
+  bootstrap: (name: string, email: string, password: string) =>
+    request<TokenResponse>(`/api/auth/bootstrap`, { method: "POST", body: JSON.stringify({ name, email, password }) }),
+  login: (email: string, password: string) =>
+    request<TokenResponse>(`/api/auth/login`, { method: "POST", body: JSON.stringify({ email, password }) }),
+  me: () => request<User>(`/api/auth/me`),
+  changePassword: (current_password: string, new_password: string) =>
+    request<{ ok: boolean }>(`/api/auth/change-password`, {
+      method: "POST",
+      body: JSON.stringify({ current_password, new_password }),
+    }),
+
   dashboard: (ccy: string) => request<Dashboard>(`/api/dashboard?ccy=${ccy}`),
 
   clients: (ccy: string) => request<ClientSummary[]>(`/api/clients?ccy=${ccy}`),
@@ -50,6 +92,11 @@ export const api = {
   updateClient: (id: number, payload: Partial<ClientInput>, ccy = "EUR") =>
     request<Client>(`/api/clients/${id}?ccy=${ccy}`, { method: "PATCH", body: JSON.stringify(payload) }),
   deleteClient: (id: number) => request<{ ok: boolean }>(`/api/clients/${id}`, { method: "DELETE" }),
+  createCashFlow: (clientId: number, payload: CashFlowInput) =>
+    request<CashFlow>(`/api/clients/${clientId}/cashflows`, {
+      method: "POST",
+      body: JSON.stringify({ ...payload, client_id: clientId }),
+    }),
 
   globalPortfolio: (ccy: string) => request<GlobalPortfolio>(`/api/portfolios/global?ccy=${ccy}`),
   portfolio: (id: number, ccy: string) => request<Portfolio>(`/api/portfolios/${id}?ccy=${ccy}`),
@@ -144,4 +191,11 @@ export const api = {
 
   fxRates: () => request<FXRate[]>(`/api/fx/rates`),
   fxCurrencies: () => request<string[]>(`/api/fx/currencies`),
+
+  aumTargets: (ccy: string) => request<AumTarget[]>(`/api/financier/aum-targets?ccy=${ccy}`),
+  createAumTarget: (payload: AumTargetInput, ccy = "EUR") =>
+    request<AumTarget>(`/api/financier/aum-targets?ccy=${ccy}`, { method: "POST", body: JSON.stringify(payload) }),
+  updateAumTarget: (id: number, payload: Partial<AumTargetInput>, ccy = "EUR") =>
+    request<AumTarget>(`/api/financier/aum-targets/${id}?ccy=${ccy}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deleteAumTarget: (id: number) => request<{ ok: boolean }>(`/api/financier/aum-targets/${id}`, { method: "DELETE" }),
 };

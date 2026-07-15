@@ -9,7 +9,9 @@ function defaults(clientId: number): MandateInput {
     status: "active",
     signing_date: new Date().toISOString().slice(0, 10),
     renewal_date: null,
+    entry_fee_pct: 0,
     mgmt_fee_pct: 1.5,
+    exit_fee_pct: 0,
     perf_fee_pct: 15,
     hurdle_rate_pct: 0,
     high_water_mark: 0,
@@ -38,7 +40,9 @@ export function MandateForm({
           status: initial.status,
           signing_date: initial.signing_date,
           renewal_date: initial.renewal_date,
+          entry_fee_pct: initial.entry_fee_pct,
           mgmt_fee_pct: initial.mgmt_fee_pct,
+          exit_fee_pct: initial.exit_fee_pct,
           perf_fee_pct: initial.perf_fee_pct,
           hurdle_rate_pct: initial.hurdle_rate_pct,
           high_water_mark: initial.high_water_mark,
@@ -91,8 +95,14 @@ export function MandateForm({
             onChange={(e) => set("renewal_date", e.target.value || null)}
           />
         </Field>
+        <Field label="Frais d'entrée (%)">
+          <input type="number" step="0.01" className={inputClass} value={form.entry_fee_pct} onChange={(e) => set("entry_fee_pct", Number(e.target.value))} />
+        </Field>
         <Field label="Frais de gestion (%)">
           <input type="number" step="0.01" className={inputClass} value={form.mgmt_fee_pct} onChange={(e) => set("mgmt_fee_pct", Number(e.target.value))} />
+        </Field>
+        <Field label="Frais de sortie (%)">
+          <input type="number" step="0.01" className={inputClass} value={form.exit_fee_pct} onChange={(e) => set("exit_fee_pct", Number(e.target.value))} />
         </Field>
         <Field label="Performance fee (%)">
           <input type="number" step="0.1" className={inputClass} value={form.perf_fee_pct} onChange={(e) => set("perf_fee_pct", Number(e.target.value))} />

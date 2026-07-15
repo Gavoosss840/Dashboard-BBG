@@ -7,7 +7,10 @@ import { StatTile } from "../components/ui/StatTile";
 import { PageHeader } from "../components/ui/PageHeader";
 import { LoadingState, ErrorState } from "../components/ui/States";
 import { Badge } from "../components/ui/Badge";
+import { Modal } from "../components/ui/Modal";
+import { AumTargetForm } from "../components/forms/AumTargetForm";
 import { formatDate, formatMoney } from "../lib/format";
+import type { AumTarget, AumTargetInput } from "../api/types";
 
 const STATUS_OPTIONS = ["all", "draft", "invoiced", "pending", "paid"];
 
@@ -20,7 +23,24 @@ export function FinancierPage() {
     [statusFilter]
   );
   const feePreview = useApi(() => api.feeEnginePreview(currency), [currency]);
+  const aumTargets = useApi(() => api.aumTargets(currency), [currency]);
   const [busyMandateId, setBusyMandateId] = useState<number | null>(null);
+  const [targetModal, setTargetModal] = useState<{ type: "new" } | { type: "edit"; target: AumTarget } | null>(null);
+
+  async function handleTargetSubmit(payload: AumTargetInput) {
+    if (targetModal?.type === "edit") {
+      await api.updateAumTarget(targetModal.target.id, payload, currency);
+    } else {
+      await api.createAumTarget(payload, currency);
+    }
+    setTargetModal(null);
+    aumTargets.reload();
+  }
+
+  async function handleDeleteTarget(id: number) {
+    await api.deleteAumTarget(id);
+    aumTargets.reload();
+  }
 
   async function markPaid(id: number) {
     await api.updateTransactionStatus(id, "paid", new Date().toISOString().slice(0, 10));
@@ -67,6 +87,64 @@ export function FinancierPage() {
         />
         <StatTile label="Encaissé cette année" value={formatMoney(summary.data.paid_ytd, currency, { compact: true })} tone="good" />
       </div>
+
+      <Card
+        className="mt-4"
+        title="Objectifs d'AUM"
+        action={
+          <button
+            onClick={() => setTargetModal({ type: "new" })}
+            className="rounded border border-white/10 px-2 py-1 text-xs text-[var(--text-secondary)] hover:border-[var(--series-1)] hover:text-[var(--series-1)]"
+          >
+            + Objectif
+          </button>
+        }
+      >
+        {aumTargets.loading && <LoadingState />}
+        {aumTargets.error && <ErrorState message={aumTargets.error} />}
+        {aumTargets.data && aumTargets.data.length === 0 && (
+          <div className="text-sm text-[var(--text-muted)]">Aucun objectif défini.</div>
+        )}
+        {aumTargets.data && aumTargets.data.length > 0 && (
+          <div className="space-y-4">
+            {aumTargets.data.map((t) => (
+              <div key={t.id}>
+                <div className="mb-1 flex items-center justify-between text-sm">
+                  <span className="font-medium">
+                    {t.label} {t.target_date && <span className="text-xs font-normal text-[var(--text-muted)]">— {formatDate(t.target_date)}</span>}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="tabular text-xs text-[var(--text-secondary)]">
+                      {formatMoney(t.current_aum, currency, { compact: true })} / {formatMoney(t.target_amount, t.currency, { compact: true })}{" "}
+                      ({t.progress_pct.toFixed(0)}%)
+                    </span>
+                    <button
+                      onClick={() => setTargetModal({ type: "edit", target: t })}
+                      className="text-xs text-[var(--text-muted)] hover:text-[var(--series-1)]"
+                    >
+                      modifier
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (window.confirm("Supprimer cet objectif ?")) handleDeleteTarget(t.id);
+                      }}
+                      className="text-xs text-[var(--text-muted)] hover:text-[var(--status-critical)]"
+                    >
+                      suppr.
+                    </button>
+                  </div>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-white/5">
+                  <div
+                    className="h-full rounded-full bg-[var(--series-1)]"
+                    style={{ width: `${Math.min(t.progress_pct, 100)}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
 
       <Card className="mt-4" title="Fee Engine" action={<span className="text-xs text-[var(--text-muted)]">Calcul live par mandat</span>}>
         {feePreview.loading && <LoadingState />}
@@ -186,6 +264,19 @@ export function FinancierPage() {
           </tbody>
         </table>
       </Card>
+
+      <Modal
+        open={targetModal !== null}
+        onClose={() => setTargetModal(null)}
+        title={targetModal?.type === "edit" ? "Modifier l'objectif" : "Nouvel objectif d'AUM"}
+      >
+        <AumTargetForm
+          initial={targetModal?.type === "edit" ? targetModal.target : undefined}
+          defaultCurrency={currency}
+          onSubmit={handleTargetSubmit}
+          onCancel={() => setTargetModal(null)}
+        />
+      </Modal>
     </div>
   );
 }

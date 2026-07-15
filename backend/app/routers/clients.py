@@ -115,6 +115,45 @@ def update_client(
     return _build_client_out(client, rates, ccy)
 
 
+@router.post("/{client_id}/cashflows", response_model=schemas.CashFlowOut)
+def create_cash_flow(client_id: int, body: schemas.CashFlowCreate, db: Session = Depends(get_db)):
+    client = db.query(models.Client).filter(models.Client.id == client_id).first()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    if body.flow_type not in ("deposit", "withdrawal"):
+        raise HTTPException(status_code=400, detail="flow_type must be 'deposit' or 'withdrawal'")
+
+    cash_flow = models.CashFlow(
+        client_id=client_id, date=body.date, flow_type=body.flow_type,
+        amount=body.amount, currency=body.currency,
+    )
+    db.add(cash_flow)
+
+    # Auto-generate the entry/exit fee transaction from the active mandate's rate, if any.
+    mandate = (
+        db.query(models.Mandate)
+        .filter(models.Mandate.client_id == client_id, models.Mandate.status == "active")
+        .first()
+    )
+    if mandate:
+        rate = mandate.entry_fee_pct if body.flow_type == "deposit" else mandate.exit_fee_pct
+        if rate > 0:
+            fee_amount = round(body.amount * rate / 100, 2)
+            fee_type = "entry_fee" if body.flow_type == "deposit" else "exit_fee"
+            label = "d'entrée" if body.flow_type == "deposit" else "de sortie"
+            db.add(models.Transaction(
+                client_id=client_id, transaction_type=fee_type, amount=fee_amount,
+                currency=body.currency, status="draft", issue_date=body.date,
+                due_date=body.date + dt.timedelta(days=30),
+                invoice_ref=f"INV-{fee_type.upper().replace('_', '-')}-{client_id:04d}-{body.date.strftime('%Y%m%d')}",
+                description=f"Frais {label} — {rate}% sur {body.amount:,.2f} {body.currency}",
+            ))
+
+    db.commit()
+    db.refresh(cash_flow)
+    return cash_flow
+
+
 @router.delete("/{client_id}")
 def delete_client(client_id: int, db: Session = Depends(get_db)):
     client = db.query(models.Client).filter(models.Client.id == client_id).first()

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, joinedload
 from app import models, schemas
 from app.database import get_db
 from app.deps import fx_rates, target_currency
-from app.services import fee_engine
+from app.services import fee_engine, pnl
 from app.services.fx import convert
 from app.utils import AS_OF
 
@@ -179,3 +179,71 @@ def crystallize_performance_fee(mandate_id: int, db: Session = Depends(get_db), 
     item = schemas.TransactionOut.model_validate(txn)
     item.client_name = mandate.client.name
     return item
+
+
+def _current_aum(db: Session, rates: dict, ccy: str) -> float:
+    clients = db.query(models.Client).options(
+        joinedload(models.Client.portfolios).joinedload(models.Portfolio.nav_history)
+    ).all()
+    return pnl.total_aum(clients, rates, ccy)
+
+
+def _target_to_out(target: models.AumTarget, current_aum: float, rates: dict, ccy: str) -> schemas.AumTargetOut:
+    target_in_ccy = convert(target.target_amount, target.currency, ccy, rates)
+    item = schemas.AumTargetOut.model_validate(target)
+    item.current_aum = current_aum
+    item.progress_pct = (current_aum / target_in_ccy * 100) if target_in_ccy else 0.0
+    return item
+
+
+@router.get("/aum-targets", response_model=list[schemas.AumTargetOut])
+def list_aum_targets(
+    db: Session = Depends(get_db),
+    ccy: str = Depends(target_currency),
+    rates: dict = Depends(fx_rates),
+):
+    current_aum = _current_aum(db, rates, ccy)
+    targets = db.query(models.AumTarget).order_by(models.AumTarget.target_date).all()
+    return [_target_to_out(t, current_aum, rates, ccy) for t in targets]
+
+
+@router.post("/aum-targets", response_model=schemas.AumTargetOut)
+def create_aum_target(
+    body: schemas.AumTargetCreate,
+    db: Session = Depends(get_db),
+    ccy: str = Depends(target_currency),
+    rates: dict = Depends(fx_rates),
+):
+    target = models.AumTarget(**body.model_dump())
+    db.add(target)
+    db.commit()
+    db.refresh(target)
+    return _target_to_out(target, _current_aum(db, rates, ccy), rates, ccy)
+
+
+@router.patch("/aum-targets/{target_id}", response_model=schemas.AumTargetOut)
+def update_aum_target(
+    target_id: int,
+    body: schemas.AumTargetUpdate,
+    db: Session = Depends(get_db),
+    ccy: str = Depends(target_currency),
+    rates: dict = Depends(fx_rates),
+):
+    target = db.query(models.AumTarget).filter(models.AumTarget.id == target_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="Target not found")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(target, field, value)
+    db.commit()
+    db.refresh(target)
+    return _target_to_out(target, _current_aum(db, rates, ccy), rates, ccy)
+
+
+@router.delete("/aum-targets/{target_id}")
+def delete_aum_target(target_id: int, db: Session = Depends(get_db)):
+    target = db.query(models.AumTarget).filter(models.AumTarget.id == target_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="Target not found")
+    db.delete(target)
+    db.commit()
+    return {"ok": True}

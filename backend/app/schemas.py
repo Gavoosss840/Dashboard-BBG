@@ -21,6 +21,33 @@ class UserOut(ORMBase):
     bio: str
 
 
+# ---------- Auth ----------
+class BootstrapRequest(BaseModel):
+    name: str
+    email: str
+    password: str
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: UserOut
+
+
+class BootstrapStatusOut(BaseModel):
+    needs_bootstrap: bool
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
 # ---------- Mandates ----------
 class MandateOut(ORMBase):
     id: int
@@ -30,7 +57,9 @@ class MandateOut(ORMBase):
     status: str
     signing_date: dt.date
     renewal_date: dt.date | None
+    entry_fee_pct: float
     mgmt_fee_pct: float
+    exit_fee_pct: float
     perf_fee_pct: float
     hurdle_rate_pct: float
     high_water_mark: float
@@ -138,7 +167,9 @@ class MandateCreate(BaseModel):
     status: str = "active"
     signing_date: dt.date
     renewal_date: dt.date | None = None
+    entry_fee_pct: float = 0.0
     mgmt_fee_pct: float = 1.5
+    exit_fee_pct: float = 0.0
     perf_fee_pct: float = 15.0
     hurdle_rate_pct: float = 0.0
     high_water_mark: float = 0.0
@@ -152,7 +183,9 @@ class MandateUpdate(BaseModel):
     status: str | None = None
     signing_date: dt.date | None = None
     renewal_date: dt.date | None = None
+    entry_fee_pct: float | None = None
     mgmt_fee_pct: float | None = None
+    exit_fee_pct: float | None = None
     perf_fee_pct: float | None = None
     hurdle_rate_pct: float | None = None
     high_water_mark: float | None = None
@@ -272,6 +305,50 @@ class FeeEnginePreviewOut(BaseModel):
     accrued_perf_fee: float
     mgmt_fee_invoiceable: bool
     perf_fee_crystallizable: bool
+
+
+class CashFlowOut(ORMBase):
+    id: int
+    client_id: int
+    date: dt.date
+    flow_type: str
+    amount: float
+    currency: str
+
+
+class CashFlowCreate(BaseModel):
+    client_id: int
+    date: dt.date
+    flow_type: str  # "deposit" | "withdrawal"
+    amount: float
+    currency: str = "EUR"
+
+
+class AumTargetOut(ORMBase):
+    id: int
+    label: str
+    target_amount: float
+    currency: str
+    target_date: dt.date | None
+    notes: str
+    current_aum: float = 0.0
+    progress_pct: float = 0.0
+
+
+class AumTargetCreate(BaseModel):
+    label: str
+    target_amount: float
+    currency: str = "EUR"
+    target_date: dt.date | None = None
+    notes: str = ""
+
+
+class AumTargetUpdate(BaseModel):
+    label: str | None = None
+    target_amount: float | None = None
+    currency: str | None = None
+    target_date: dt.date | None = None
+    notes: str | None = None
 
 
 # ---------- CRM ----------

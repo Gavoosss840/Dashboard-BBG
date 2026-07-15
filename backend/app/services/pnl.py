@@ -99,3 +99,7 @@ def client_aggregate(client: models.Client, rates: dict, target_ccy: str, as_of:
         "total_withdrawals": total_withdrawals,
         "net_deposits": total_deposits - total_withdrawals,
     }
+
+
+def total_aum(clients: list[models.Client], rates: dict, target_ccy: str) -> float:
+    return sum(portfolio_current_nav(p, rates, target_ccy) for c in clients for p in c.portfolios)

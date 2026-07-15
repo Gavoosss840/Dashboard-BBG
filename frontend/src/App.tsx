@@ -1,5 +1,6 @@
 import { Route, Routes } from "react-router-dom";
 import { Layout } from "./components/Layout";
+import { LoginPage } from "./pages/LoginPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { ClientsPage } from "./pages/ClientsPage";
 import { ClientDetailPage } from "./pages/ClientDetailPage";
@@ -13,8 +14,24 @@ import { EarningsPage } from "./pages/EarningsPage";
 import { ReferencePage } from "./pages/ReferencePage";
 import { UsersPage } from "./pages/UsersPage";
 import { AllocationPage } from "./pages/AllocationPage";
+import { useAuth } from "./context/AuthContext";
+import { LoadingState } from "./components/ui/States";
 
 function App() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="flex h-screen w-screen items-center justify-center bg-[var(--surface-0)]">
+        <LoadingState />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <LoginPage />;
+  }
+
   return (
     <Layout>
       <Routes>

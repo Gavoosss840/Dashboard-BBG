@@ -14,6 +14,24 @@ modifie entièrement depuis l'interface — voir "CRUD complet" ci-dessous.
 - **Backend**: FastAPI + SQLAlchemy + SQLite (`backend/`)
 - **Frontend**: React + TypeScript + Vite + Tailwind v4 + Recharts (`frontend/`)
 
+## Authentification
+
+Toute l'API (sauf `/api/health` et les endpoints de login) exige un token —
+sans compte, aucune donnée n'est accessible. Au tout premier lancement,
+l'application affiche un écran de **création du compte administrateur**
+(nom, email, mot de passe ≥ 8 caractères) au lieu du login, tant qu'aucun
+compte n'existe. Ensuite, c'est un écran de connexion classique.
+
+Le token de session vit dans `sessionStorage` du navigateur : il survit à un
+rafraîchissement de page mais disparaît à la fermeture de l'onglet/navigateur
+— il faut alors se reconnecter.
+
+**Avant d'exposer la plateforme au-delà de ton propre poste** (ex: accès
+distant, VPS), change impérativement `AUTH_SECRET_KEY` dans
+`docker-compose.yml` (ou en variable d'environnement) pour une longue chaîne
+aléatoire — sinon n'importe qui connaissant la valeur par défaut du code
+source pourrait forger un token valide.
+
 ## Lancer en local — le plus simple
 
 Double-clique sur **`start.sh`** (Mac/Linux) ou **`start.bat`** (Windows) à la
@@ -92,10 +110,13 @@ SEED_DEMO_DATA=true uvicorn app.main:app --reload --port 8000
 Tout se crée, modifie et supprime depuis l'interface :
 
 - **Clients** (`/clients`) : créer/modifier/supprimer un client, ses mandats,
-  ses portefeuilles et ses positions — directement depuis la fiche client.
+  ses portefeuilles, ses positions et ses dépôts/retraits — directement depuis
+  la fiche client.
 - **CRM** (`/crm`) : créer/modifier/supprimer un contact (tous les champs, pas
   seulement l'étape du pipeline).
 - **Users** (`/users`) : créer/modifier/supprimer un associé.
+- **Objectifs d'AUM** (`/financier`) : créer/modifier/supprimer un objectif
+  d'AUM cible, avec barre de progression vs AUM réelle.
 
 Supprimer un client supprime en cascade ses mandats, portefeuilles, positions,
 historique NAV, cash-flows, transactions et documents de compliance associés.
@@ -107,9 +128,9 @@ historique NAV, cash-flows, transactions et documents de compliance associés.
 | Dashboard | `/` | AUM total, P&L YTD/since inception, NAV globale, répartition par poche/classe d'actifs |
 | Clients | `/clients`, `/clients/:id` | Fiche client (dépôts, P&L, mandats, positions) |
 | Portfolio | `/portfolio` | Composition consolidée (classe d'actifs, secteur, région, devise, client) |
-| Financier | `/financier` | Tracker des frais + fee engine (calcul live, génération de facture, cristallisation de la performance fee) |
+| Financier | `/financier` | Objectifs d'AUM éditables, tracker des frais + fee engine (calcul live, génération de facture, cristallisation de la performance fee) |
 | Compliance | `/compliance` | Suivi KYC/AML/suitability par client, renouvellement en un clic, échéances de mandat |
-| Mandats | `/mandates` | Répertoire des mandats de gestion (frais, hurdle, HWM, benchmark) |
+| Mandats | `/mandates` | Répertoire des mandats de gestion (frais d'entrée/gestion/sortie/performance, hurdle, HWM, benchmark) |
 | CRM | `/crm` | Pipeline prospects/clients en kanban |
 | Watchlist & News | `/market` | Watchlist éditable + fil d'actualités |
 | Earnings | `/earnings` | Calendrier de résultats avec alertes on/off |
@@ -131,6 +152,20 @@ Un solveur numérique général (SLSQP) prend le relais automatiquement si une
 3ᵉ poche est ajoutée. La vol réalisée est calculée sur une fenêtre glissante
 de 60 jours (paramétrable par bucket).
 
+## Structure de frais
+
+Chaque mandat porte les 4 frais classiques de la gestion d'actifs / hedge fund :
+
+- **Frais d'entrée** (`entry_fee_pct`) : appliqué automatiquement quand tu
+  enregistres un dépôt (`+ Dépôt / Retrait` sur la fiche client) — génère une
+  transaction `entry_fee` dans Financier.
+- **Frais de gestion** (`mgmt_fee_pct`) : accrual live pro-rata NAV, facturé via
+  le fee engine.
+- **Frais de sortie** (`exit_fee_pct`) : appliqué automatiquement sur un
+  retrait, même logique que les frais d'entrée.
+- **Performance fee** (`perf_fee_pct`, avec High-Water Mark et hurdle
+  optionnel) : cristallisée via le fee engine.
+
 ## Intégration Interactive Brokers (à venir)
 
 Toutes les données sont actuellement mockées (`backend/app/seed_data.py`,
@@ -148,7 +183,8 @@ tables au lieu du seed aléatoire.
 - Module de risque (VaR, stress test, corrélations, concentration)
 - Reporting client automatisé (PDF/Excel, TWR/IRR vs benchmark)
 - Audit trail immuable sur les transactions
-- RBAC par rôle (admin/associé/lecture seule)
+- RBAC : le login protège tout, mais tout utilisateur connecté a les mêmes
+  droits aujourd'hui — pas encore de restriction par rôle (admin/associé/lecture seule)
 - Alerting multi-canal (email/SMS/push) sur drawdown, margin call, earnings
 - Abstraction multi-custodian (au-delà d'IBKR)
 - Data room pour les futurs documents de souscription du fonds

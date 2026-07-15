@@ -17,8 +17,18 @@ import { ClientForm } from "../components/forms/ClientForm";
 import { MandateForm } from "../components/forms/MandateForm";
 import { PortfolioForm } from "../components/forms/PortfolioForm";
 import { PositionForm } from "../components/forms/PositionForm";
+import { CashFlowForm } from "../components/forms/CashFlowForm";
 import { formatDate, formatMoney, formatNumber } from "../lib/format";
-import type { ClientInput, Mandate, MandateInput, Portfolio, PortfolioInput, Position, PositionInput } from "../api/types";
+import type {
+  CashFlowInput,
+  ClientInput,
+  Mandate,
+  MandateInput,
+  Portfolio,
+  PortfolioInput,
+  Position,
+  PositionInput,
+} from "../api/types";
 
 type ModalState =
   | { type: "editClient" }
@@ -28,6 +38,7 @@ type ModalState =
   | { type: "editPortfolio"; portfolio: Portfolio }
   | { type: "newPosition"; portfolioId: number }
   | { type: "editPosition"; position: Position }
+  | { type: "newCashFlow" }
   | null;
 
 export function ClientDetailPage() {
@@ -119,6 +130,12 @@ export function ClientDetailPage() {
     reload();
   }
 
+  async function handleCashFlowSubmit(payload: CashFlowInput) {
+    await api.createCashFlow(clientId, payload);
+    setModal(null);
+    reload();
+  }
+
   if (loading) return <LoadingState />;
   if (error) return <ErrorState message={error} />;
   if (!data) return null;
@@ -135,6 +152,12 @@ export function ClientDetailPage() {
             <Link to="/clients" className="text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)]">
               ← Retour
             </Link>
+            <button
+              onClick={() => setModal({ type: "newCashFlow" })}
+              className="rounded border border-white/10 px-3 py-1.5 text-sm text-[var(--text-secondary)] hover:border-[var(--series-1)] hover:text-[var(--series-1)]"
+            >
+              + Dépôt / Retrait
+            </button>
             <button
               onClick={() => setModal({ type: "editClient" })}
               className="rounded border border-white/10 px-3 py-1.5 text-sm text-[var(--text-secondary)] hover:border-[var(--series-1)] hover:text-[var(--series-1)]"
@@ -204,7 +227,9 @@ export function ClientDetailPage() {
                 <tr className="text-left text-xs uppercase text-[var(--text-muted)]">
                   <th className="pb-2">Type</th>
                   <th className="pb-2">Signature</th>
-                  <th className="pb-2">Frais gestion</th>
+                  <th className="pb-2">Entrée</th>
+                  <th className="pb-2">Gestion</th>
+                  <th className="pb-2">Sortie</th>
                   <th className="pb-2">Perf. fee</th>
                   <th className="pb-2">Benchmark</th>
                   <th className="pb-2">Statut</th>
@@ -216,7 +241,9 @@ export function ClientDetailPage() {
                   <tr key={m.id} className="border-t border-white/5">
                     <td className="py-2 capitalize">{m.mandate_type}</td>
                     <td className="py-2 text-[var(--text-secondary)]">{formatDate(m.signing_date)}</td>
+                    <td className="tabular py-2">{m.entry_fee_pct > 0 ? `${m.entry_fee_pct}%` : "—"}</td>
                     <td className="tabular py-2">{m.mgmt_fee_pct}%</td>
+                    <td className="tabular py-2">{m.exit_fee_pct > 0 ? `${m.exit_fee_pct}%` : "—"}</td>
                     <td className="tabular py-2">
                       {m.perf_fee_pct}% {m.hurdle_rate_pct > 0 && `(hurdle ${m.hurdle_rate_pct}%)`}
                     </td>
@@ -392,6 +419,10 @@ export function ClientDetailPage() {
           onSubmit={handlePositionSubmit}
           onCancel={() => setModal(null)}
         />
+      </Modal>
+
+      <Modal open={modal?.type === "newCashFlow"} onClose={() => setModal(null)} title="Dépôt / Retrait">
+        <CashFlowForm defaultCurrency={data.base_currency} onSubmit={handleCashFlowSubmit} onCancel={() => setModal(null)} />
       </Modal>
     </div>
   );

@@ -19,13 +19,60 @@ export interface Mandate {
   status: string;
   signing_date: string;
   renewal_date: string | null;
+  entry_fee_pct: number;
   mgmt_fee_pct: number;
+  exit_fee_pct: number;
   perf_fee_pct: number;
   hurdle_rate_pct: number;
   high_water_mark: number;
   benchmark: string;
   notice_period_days: number;
   document_ref: string;
+}
+
+export interface CashFlow {
+  id: number;
+  client_id: number;
+  date: string;
+  flow_type: string;
+  amount: number;
+  currency: string;
+}
+
+export interface CashFlowInput {
+  date: string;
+  flow_type: string;
+  amount: number;
+  currency: string;
+}
+
+export interface AumTarget {
+  id: number;
+  label: string;
+  target_amount: number;
+  currency: string;
+  target_date: string | null;
+  notes: string;
+  current_aum: number;
+  progress_pct: number;
+}
+
+export interface AumTargetInput {
+  label: string;
+  target_amount: number;
+  currency: string;
+  target_date: string | null;
+  notes: string;
+}
+
+export interface BootstrapStatus {
+  needs_bootstrap: boolean;
+}
+
+export interface TokenResponse {
+  access_token: string;
+  token_type: string;
+  user: User;
 }
 
 export interface Position {
@@ -128,7 +175,9 @@ export interface MandateInput {
   status: string;
   signing_date: string;
   renewal_date: string | null;
+  entry_fee_pct: number;
   mgmt_fee_pct: number;
+  exit_fee_pct: number;
   perf_fee_pct: number;
   hurdle_rate_pct: number;
   high_water_mark: number;
