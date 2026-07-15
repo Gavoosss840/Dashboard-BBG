@@ -22,6 +22,18 @@ sur `stop.sh` / `stop.bat`.
 > clique droit → "Ouvrir avec" → "Terminal", ou lance-le depuis un terminal :
 > `./start.sh`.
 
+### Raccourcis Bureau (Windows)
+
+Pour avoir une icône directement sur le Bureau (comme une vraie application) :
+double-clique une fois sur **`Installer les raccourcis Bureau.bat`** à la
+racine du repo. Ça crée deux raccourcis sur ton Bureau Windows :
+
+- **Boulet Capital - Demarrer**
+- **Boulet Capital - Arreter**
+
+Ensuite tu n'as plus jamais besoin d'ouvrir le dossier : tout se pilote depuis
+ces deux icônes.
+
 ## Lancer en local — Docker (manuel)
 
 ```bash
