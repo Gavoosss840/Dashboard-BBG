@@ -106,3 +106,76 @@ def get_portfolio(
         positions_out.append(pos_out)
     out.positions = positions_out
     return out
+
+
+@router.post("", response_model=schemas.PortfolioOut)
+def create_portfolio(body: schemas.PortfolioCreate, db: Session = Depends(get_db)):
+    client = db.query(models.Client).filter(models.Client.id == body.client_id).first()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    portfolio = models.Portfolio(**body.model_dump())
+    db.add(portfolio)
+    db.commit()
+    db.refresh(portfolio)
+    out = schemas.PortfolioOut.model_validate(portfolio)
+    return out
+
+
+@router.patch("/{portfolio_id}", response_model=schemas.PortfolioOut)
+def update_portfolio(portfolio_id: int, body: schemas.PortfolioUpdate, db: Session = Depends(get_db)):
+    portfolio = db.query(models.Portfolio).filter(models.Portfolio.id == portfolio_id).first()
+    if not portfolio:
+        raise HTTPException(status_code=404, detail="Portfolio not found")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(portfolio, field, value)
+    db.commit()
+    db.refresh(portfolio)
+    return schemas.PortfolioOut.model_validate(portfolio)
+
+
+@router.delete("/{portfolio_id}")
+def delete_portfolio(portfolio_id: int, db: Session = Depends(get_db)):
+    portfolio = db.query(models.Portfolio).filter(models.Portfolio.id == portfolio_id).first()
+    if not portfolio:
+        raise HTTPException(status_code=404, detail="Portfolio not found")
+    db.query(models.Position).filter(models.Position.portfolio_id == portfolio_id).delete(synchronize_session=False)
+    db.query(models.NavHistory).filter(models.NavHistory.portfolio_id == portfolio_id).delete(synchronize_session=False)
+    db.delete(portfolio)
+    db.commit()
+    return {"ok": True}
+
+
+@router.post("/{portfolio_id}/positions", response_model=schemas.PositionOut)
+def create_position(portfolio_id: int, body: schemas.PositionCreate, db: Session = Depends(get_db)):
+    portfolio = db.query(models.Portfolio).filter(models.Portfolio.id == portfolio_id).first()
+    if not portfolio:
+        raise HTTPException(status_code=404, detail="Portfolio not found")
+    payload = body.model_dump()
+    payload["portfolio_id"] = portfolio_id
+    position = models.Position(**payload)
+    db.add(position)
+    db.commit()
+    db.refresh(position)
+    return schemas.PositionOut.model_validate(position)
+
+
+@router.patch("/positions/{position_id}", response_model=schemas.PositionOut)
+def update_position(position_id: int, body: schemas.PositionUpdate, db: Session = Depends(get_db)):
+    position = db.query(models.Position).filter(models.Position.id == position_id).first()
+    if not position:
+        raise HTTPException(status_code=404, detail="Position not found")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(position, field, value)
+    db.commit()
+    db.refresh(position)
+    return schemas.PositionOut.model_validate(position)
+
+
+@router.delete("/positions/{position_id}")
+def delete_position(position_id: int, db: Session = Depends(get_db)):
+    position = db.query(models.Position).filter(models.Position.id == position_id).first()
+    if not position:
+        raise HTTPException(status_code=404, detail="Position not found")
+    db.delete(position)
+    db.commit()
+    return {"ok": True}

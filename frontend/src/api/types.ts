@@ -107,6 +107,69 @@ export interface Transaction {
   description: string;
 }
 
+export interface ClientInput {
+  name: string;
+  client_type: string;
+  status: string;
+  entry_date: string;
+  base_currency: string;
+  country: string;
+  email: string;
+  phone: string;
+  risk_profile: string;
+  kyc_status: string;
+  relationship_manager_id: number | null;
+  notes: string;
+}
+
+export interface MandateInput {
+  client_id: number;
+  mandate_type: string;
+  status: string;
+  signing_date: string;
+  renewal_date: string | null;
+  mgmt_fee_pct: number;
+  perf_fee_pct: number;
+  hurdle_rate_pct: number;
+  high_water_mark: number;
+  benchmark: string;
+  notice_period_days: number;
+  document_ref: string;
+}
+
+export interface PortfolioInput {
+  client_id: number;
+  ptf_id: string;
+  base_currency: string;
+  strategy_bucket: string;
+  custodian: string;
+  inception_nav: number;
+}
+
+export interface PositionInput {
+  ticker: string;
+  name: string;
+  asset_class: string;
+  sector: string;
+  region: string;
+  currency: string;
+  quantity: number;
+  avg_cost: number;
+  last_price: number;
+}
+
+export interface UserInput {
+  name: string;
+  email: string;
+  role: string;
+  title: string;
+  phone: string;
+  avatar_initials: string;
+  active: boolean;
+  joined_date: string;
+  bio: string;
+}
+
 export interface FeeEnginePreview {
   mandate_id: number;
   client_id: number;

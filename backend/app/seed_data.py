@@ -1,14 +1,22 @@
-"""Deterministic mock-data generator for Boulet Capital's internal terminal.
+"""Data seeding for Boulet Capital's internal terminal.
 
-All figures are illustrative placeholders (NOT real market data / real client
-data) meant to make every module of the terminal exercisable end to end.
-Swap this out for real IBKR feeds and a real client ledger once available.
+By default the platform starts EMPTY (no clients, no AUM, no fake track
+record) — only structural configuration is seeded: FX rates (needed for
+the currency switcher), the fee/glossary reference content, and the two
+capital-allocation buckets (Stock Picking / Algo Arbitrage) with zero AUM
+and no return history.
+
+Set the environment variable SEED_DEMO_DATA=true to additionally load a
+deterministic illustrative dataset (8 fictional clients, positions, CRM
+pipeline, watchlist, news, earnings, compliance documents) — useful for
+demos and UI development, never real client data.
 """
 
 from __future__ import annotations
 
 import datetime as dt
 import math
+import os
 import random
 
 from sqlalchemy.orm import Session
@@ -17,6 +25,8 @@ from app import models
 from app.utils import AS_OF, business_days_between
 
 random.seed(42)
+
+DEMO_MODE = os.environ.get("SEED_DEMO_DATA", "false").strip().lower() in ("1", "true", "yes")
 
 FX_RATES_VS_USD = {
     "USD": 1.0,
@@ -54,13 +64,43 @@ def _bridged_walk(start_value: float, end_value: float, n_days: int, daily_vol: 
     return path
 
 
-def seed(db: Session) -> None:
-    if db.query(models.User).count() > 0:
-        return  # already seeded
-
-    # ---------------- FX ----------------
+def _seed_fx(db: Session) -> None:
     for ccy, rate in FX_RATES_VS_USD.items():
         db.add(models.FXRate(ccy=ccy, rate_vs_usd=rate, updated_at=dt.datetime.combine(AS_OF, dt.time(8, 0))))
+
+
+def _seed_reference(db: Session) -> None:
+    reference_defs = [
+        ("fees", "Management Fee", "Frais de gestion annuel prélevé sur l'AUM, facturé pro-rata temporis (généralement trimestriellement). Typiquement 1%-2%/an dans ce book."),
+        ("fees", "Performance Fee", "Commission de surperformance prélevée sur les gains au-delà du High-Water Mark (et du Hurdle Rate si applicable). Typiquement 10%-20%."),
+        ("fees", "High-Water Mark (HWM)", "Plus haute valeur liquidative jamais atteinte par le portefeuille du client. La performance fee ne s'applique que sur les gains dépassant ce seuil."),
+        ("fees", "Hurdle Rate", "Taux de rendement minimum que le portefeuille doit dépasser avant que la performance fee ne s'applique."),
+        ("glossary", "NAV (Net Asset Value)", "Valeur liquidative du portefeuille = valeur de marché des positions + cash."),
+        ("glossary", "TWR (Time-Weighted Return)", "Rendement neutralisant l'effet des flux de capitaux (dépôts/retraits), utilisé pour comparer la performance de gestion pure."),
+        ("glossary", "IRR (Internal Rate of Return)", "Taux de rendement tenant compte du timing des flux de capitaux, utilisé pour la performance perçue par le client."),
+        ("glossary", "Drawdown", "Baisse depuis le dernier plus haut de la NAV, exprimée en %."),
+        ("glossary", "Sharpe Ratio", "Rendement excédentaire par unité de risque (volatilité)."),
+        ("glossary", "Risk Parity / ERC", "Allocation de capital telle que chaque poche contribue à parts égales au risque total du portefeuille global."),
+        ("procedure", "Onboarding client", "1) KYC/AML, 2) Signature du mandat de gestion, 3) Ouverture compte custodian (IBKR), 4) Dépôt initial, 5) Paramétrage du portefeuille."),
+        ("procedure", "Cycle de facturation", "Frais de gestion facturés trimestriellement à terme échu. Performance fee calculée annuellement (ou au retrait) sur gains au-dessus du HWM."),
+        ("legal", "Mandat discrétionnaire vs conseil", "Discrétionnaire: le gérant décide et exécute. Conseil (advisory): le gérant recommande, le client valide chaque opération."),
+    ]
+    for category, title, content in reference_defs:
+        db.add(models.ReferenceEntry(category=category, title=title, content=content, tags=category))
+
+
+def _seed_allocation_buckets(db: Session) -> None:
+    bucket_defs = [
+        ("Stock Picking", "#3b82f6"),
+        ("Arbitrage Algorithmique", "#22c55e"),
+    ]
+    for name, color in bucket_defs:
+        # AUM is recomputed live from portfolio market values by the allocation router.
+        db.add(models.AllocationBucket(name=name, aum=0.0, currency="USD", lookback_days=60, color=color))
+
+
+def _seed_demo_data(db: Session) -> None:
+    """Illustrative placeholders only (NOT real market/client data) — SEED_DEMO_DATA=true."""
 
     # ---------------- Users (associates) ----------------
     users = [
@@ -268,7 +308,7 @@ def seed(db: Session) -> None:
                 description=f"Frais de gestion T{((q_date.month - 1) // 3) + 1} {q_date.year}",
             ))
             approx_nav *= (1 + cdef["ann_return"] / 4)
-        # Performance fees are no longer pre-seeded: the fee engine
+        # Performance fees are not pre-seeded: the fee engine
         # (services/fee_engine.py) computes and crystallizes them live
         # against each mandate's High-Water Mark.
 
@@ -376,40 +416,31 @@ def seed(db: Session) -> None:
             held_in_portfolio=True,
         ))
 
-    # ---------------- Reference / glossary ----------------
-    reference_defs = [
-        ("fees", "Management Fee", "Frais de gestion annuel prélevé sur l'AUM, facturé pro-rata temporis (généralement trimestriellement). Typiquement 1%-2%/an dans ce book."),
-        ("fees", "Performance Fee", "Commission de surperformance prélevée sur les gains au-delà du High-Water Mark (et du Hurdle Rate si applicable). Typiquement 10%-20%."),
-        ("fees", "High-Water Mark (HWM)", "Plus haute valeur liquidative jamais atteinte par le portefeuille du client. La performance fee ne s'applique que sur les gains dépassant ce seuil."),
-        ("fees", "Hurdle Rate", "Taux de rendement minimum que le portefeuille doit dépasser avant que la performance fee ne s'applique."),
-        ("glossary", "NAV (Net Asset Value)", "Valeur liquidative du portefeuille = valeur de marché des positions + cash."),
-        ("glossary", "TWR (Time-Weighted Return)", "Rendement neutralisant l'effet des flux de capitaux (dépôts/retraits), utilisé pour comparer la performance de gestion pure."),
-        ("glossary", "IRR (Internal Rate of Return)", "Taux de rendement tenant compte du timing des flux de capitaux, utilisé pour la performance perçue par le client."),
-        ("glossary", "Drawdown", "Baisse depuis le dernier plus haut de la NAV, exprimée en %."),
-        ("glossary", "Sharpe Ratio", "Rendement excédentaire par unité de risque (volatilité)."),
-        ("glossary", "Risk Parity / ERC", "Allocation de capital telle que chaque poche contribue à parts égales au risque total du portefeuille global."),
-        ("procedure", "Onboarding client", "1) KYC/AML, 2) Signature du mandat de gestion, 3) Ouverture compte custodian (IBKR), 4) Dépôt initial, 5) Paramétrage du portefeuille."),
-        ("procedure", "Cycle de facturation", "Frais de gestion facturés trimestriellement à terme échu. Performance fee calculée annuellement (ou au retrait) sur gains au-dessus du HWM."),
-        ("legal", "Mandat discrétionnaire vs conseil", "Discrétionnaire: le gérant décide et exécute. Conseil (advisory): le gérant recommande, le client valide chaque opération."),
-    ]
-    for category, title, content in reference_defs:
-        db.add(models.ReferenceEntry(category=category, title=title, content=content, tags=category))
-
-    # ---------------- Allocation buckets (risk parity) ----------------
-    bucket_defs = [
-        ("Stock Picking", "stock_picking", 0.0009, 0.018, "#3b82f6"),
-        ("Arbitrage Algorithmique", "algo_arbitrage", 0.0004, 0.006, "#22c55e"),
-    ]
-    for name, key, mu, sigma, color in bucket_defs:
-        # AUM is recomputed live from portfolio market values by the allocation router.
-        bucket = models.AllocationBucket(name=name, aum=0.0, currency="USD", lookback_days=60, color=color)
-        db.add(bucket)
-        db.flush()
+    # ---------------- Allocation return history (demo only) ----------------
+    bucket_profiles = {
+        "Stock Picking": (0.0009, 0.018),
+        "Arbitrage Algorithmique": (0.0004, 0.006),
+    }
+    for bucket in db.query(models.AllocationBucket).all():
+        mu, sigma = bucket_profiles.get(bucket.name, (0.0005, 0.01))
         for i in range(180):
             day = AS_OF - dt.timedelta(days=179 - i)
             if day.weekday() >= 5:
                 continue
             ret = random.gauss(mu, sigma) * 100
             db.add(models.AllocationReturn(bucket_id=bucket.id, date=day, daily_return_pct=round(ret, 4)))
+
+
+def seed(db: Session) -> None:
+    if db.query(models.FXRate).count() > 0:
+        return  # already seeded
+
+    _seed_fx(db)
+    _seed_reference(db)
+    _seed_allocation_buckets(db)
+    db.flush()
+
+    if DEMO_MODE:
+        _seed_demo_data(db)
 
     db.commit()

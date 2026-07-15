@@ -81,3 +81,63 @@ def get_client(
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
     return _build_client_out(client, rates, ccy)
+
+
+@router.post("", response_model=schemas.ClientOut)
+def create_client(
+    body: schemas.ClientCreate,
+    db: Session = Depends(get_db),
+    ccy: str = Depends(target_currency),
+    rates: dict = Depends(fx_rates),
+):
+    client = models.Client(**body.model_dump())
+    db.add(client)
+    db.commit()
+    client = _client_query(db).filter(models.Client.id == client.id).first()
+    return _build_client_out(client, rates, ccy)
+
+
+@router.patch("/{client_id}", response_model=schemas.ClientOut)
+def update_client(
+    client_id: int,
+    body: schemas.ClientUpdate,
+    db: Session = Depends(get_db),
+    ccy: str = Depends(target_currency),
+    rates: dict = Depends(fx_rates),
+):
+    client = db.query(models.Client).filter(models.Client.id == client_id).first()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(client, field, value)
+    db.commit()
+    client = _client_query(db).filter(models.Client.id == client_id).first()
+    return _build_client_out(client, rates, ccy)
+
+
+@router.delete("/{client_id}")
+def delete_client(client_id: int, db: Session = Depends(get_db)):
+    client = db.query(models.Client).filter(models.Client.id == client_id).first()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    # Select only the id column (not full ORM entities) so the bulk deletes
+    # below don't leave stale Portfolio objects in the session identity map —
+    # otherwise SQLAlchemy tries to cascade-update them when the client is
+    # deleted, raising a StaleDataError against rows already gone.
+    portfolio_ids = [pid for (pid,) in db.query(models.Portfolio.id).filter(models.Portfolio.client_id == client_id).all()]
+    if portfolio_ids:
+        db.query(models.Position).filter(models.Position.portfolio_id.in_(portfolio_ids)).delete(synchronize_session=False)
+        db.query(models.NavHistory).filter(models.NavHistory.portfolio_id.in_(portfolio_ids)).delete(synchronize_session=False)
+        db.query(models.Portfolio).filter(models.Portfolio.client_id == client_id).delete(synchronize_session=False)
+    db.query(models.Mandate).filter(models.Mandate.client_id == client_id).delete(synchronize_session=False)
+    db.query(models.CashFlow).filter(models.CashFlow.client_id == client_id).delete(synchronize_session=False)
+    db.query(models.Transaction).filter(models.Transaction.client_id == client_id).delete(synchronize_session=False)
+    db.query(models.ComplianceDocument).filter(models.ComplianceDocument.client_id == client_id).delete(synchronize_session=False)
+    db.query(models.CrmContact).filter(models.CrmContact.linked_client_id == client_id).update(
+        {"linked_client_id": None}, synchronize_session=False
+    )
+    db.expire(client)
+    db.delete(client)
+    db.commit()
+    return {"ok": True}

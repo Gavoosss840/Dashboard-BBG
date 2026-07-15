@@ -102,6 +102,131 @@ class ClientOut(ORMBase):
     portfolios: list[PortfolioOut] = []
 
 
+class ClientCreate(BaseModel):
+    name: str
+    client_type: str = "individual"
+    status: str = "active"
+    entry_date: dt.date
+    base_currency: str = "EUR"
+    country: str = ""
+    email: str = ""
+    phone: str = ""
+    risk_profile: str = "balanced"
+    kyc_status: str = "pending"
+    relationship_manager_id: int | None = None
+    notes: str = ""
+
+
+class ClientUpdate(BaseModel):
+    name: str | None = None
+    client_type: str | None = None
+    status: str | None = None
+    entry_date: dt.date | None = None
+    base_currency: str | None = None
+    country: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    risk_profile: str | None = None
+    kyc_status: str | None = None
+    relationship_manager_id: int | None = None
+    notes: str | None = None
+
+
+class MandateCreate(BaseModel):
+    client_id: int
+    mandate_type: str = "discretionary"
+    status: str = "active"
+    signing_date: dt.date
+    renewal_date: dt.date | None = None
+    mgmt_fee_pct: float = 1.5
+    perf_fee_pct: float = 15.0
+    hurdle_rate_pct: float = 0.0
+    high_water_mark: float = 0.0
+    benchmark: str = ""
+    notice_period_days: int = 30
+    document_ref: str = ""
+
+
+class MandateUpdate(BaseModel):
+    mandate_type: str | None = None
+    status: str | None = None
+    signing_date: dt.date | None = None
+    renewal_date: dt.date | None = None
+    mgmt_fee_pct: float | None = None
+    perf_fee_pct: float | None = None
+    hurdle_rate_pct: float | None = None
+    high_water_mark: float | None = None
+    benchmark: str | None = None
+    notice_period_days: int | None = None
+    document_ref: str | None = None
+
+
+class PortfolioCreate(BaseModel):
+    client_id: int
+    ptf_id: str
+    base_currency: str = "EUR"
+    strategy_bucket: str = "stock_picking"
+    custodian: str = "Interactive Brokers"
+    inception_nav: float = 0.0
+
+
+class PortfolioUpdate(BaseModel):
+    ptf_id: str | None = None
+    base_currency: str | None = None
+    strategy_bucket: str | None = None
+    custodian: str | None = None
+    inception_nav: float | None = None
+
+
+class PositionCreate(BaseModel):
+    portfolio_id: int | None = None  # supplied by the URL path, not the request body
+    ticker: str
+    name: str
+    asset_class: str = "equity"
+    sector: str = ""
+    region: str = ""
+    currency: str = "USD"
+    quantity: float
+    avg_cost: float
+    last_price: float
+
+
+class PositionUpdate(BaseModel):
+    ticker: str | None = None
+    name: str | None = None
+    asset_class: str | None = None
+    sector: str | None = None
+    region: str | None = None
+    currency: str | None = None
+    quantity: float | None = None
+    avg_cost: float | None = None
+    last_price: float | None = None
+
+
+class UserCreate(BaseModel):
+    name: str
+    email: str
+    role: str = "associate"
+    title: str = ""
+    phone: str = ""
+    avatar_initials: str = ""
+    active: bool = True
+    joined_date: dt.date
+    bio: str = ""
+
+
+class UserUpdate(BaseModel):
+    name: str | None = None
+    email: str | None = None
+    role: str | None = None
+    title: str | None = None
+    phone: str | None = None
+    avatar_initials: str | None = None
+    active: bool | None = None
+    joined_date: dt.date | None = None
+    bio: str | None = None
+
+
 class ClientSummaryOut(ORMBase):
     id: int
     name: str

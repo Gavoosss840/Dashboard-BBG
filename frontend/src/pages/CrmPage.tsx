@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { api } from "../api/client";
-import { useCurrency } from "../context/CurrencyContext";
 import { useApi } from "../lib/useApi";
 import { Card } from "../components/ui/Card";
 import { PageHeader } from "../components/ui/PageHeader";
 import { LoadingState, ErrorState } from "../components/ui/States";
+import { Modal } from "../components/ui/Modal";
+import { CrmContactForm, type CrmContactFormValues } from "../components/forms/CrmContactForm";
 import { formatDate, formatMoney } from "../lib/format";
 import type { CrmContact } from "../api/types";
 
@@ -18,19 +19,27 @@ const STAGES: { key: string; label: string }[] = [
 ];
 
 export function CrmPage() {
-  const { currency } = useCurrency();
   const { data, loading, error, reload } = useApi(() => api.crmContacts(), []);
-  const [newName, setNewName] = useState("");
-
-  async function addProspect() {
-    if (!newName.trim()) return;
-    await api.createCrmContact({ name: newName.trim(), contact_type: "prospect", stage: "lead", currency });
-    setNewName("");
-    reload();
-  }
+  const users = useApi(() => api.users(), []);
+  const [modal, setModal] = useState<{ type: "new" } | { type: "edit"; contact: CrmContact } | null>(null);
 
   async function changeStage(contact: CrmContact, stage: string) {
     await api.updateCrmContact(contact.id, { stage });
+    reload();
+  }
+
+  async function handleSubmit(values: CrmContactFormValues) {
+    if (modal?.type === "edit") {
+      await api.updateCrmContact(modal.contact.id, values);
+    } else {
+      await api.createCrmContact(values);
+    }
+    setModal(null);
+    reload();
+  }
+
+  async function handleDelete(id: number) {
+    await api.deleteCrmContact(id);
     reload();
   }
 
@@ -44,20 +53,12 @@ export function CrmPage() {
         title="CRM"
         subtitle="Pipeline prospects, clients et partenaires"
         action={
-          <div className="flex gap-2">
-            <input
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              placeholder="Nouveau prospect…"
-              className="rounded border border-white/10 bg-[var(--surface-2)] px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--series-1)]"
-            />
-            <button
-              onClick={addProspect}
-              className="rounded bg-[var(--series-1)] px-3 py-1.5 text-sm font-medium text-white hover:opacity-90"
-            >
-              Ajouter
-            </button>
-          </div>
+          <button
+            onClick={() => setModal({ type: "new" })}
+            className="rounded bg-[var(--series-1)] px-3 py-1.5 text-sm font-medium text-white hover:opacity-90"
+          >
+            + Nouveau contact
+          </button>
         }
       />
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-6">
@@ -72,7 +73,25 @@ export function CrmPage() {
               <div className="space-y-2">
                 {contacts.map((c) => (
                   <Card key={c.id} className="text-sm">
-                    <div className="font-medium">{c.name}</div>
+                    <div className="flex items-start justify-between">
+                      <div className="font-medium">{c.name}</div>
+                      <div className="flex gap-1.5">
+                        <button
+                          onClick={() => setModal({ type: "edit", contact: c })}
+                          className="text-xs text-[var(--text-muted)] hover:text-[var(--series-1)]"
+                        >
+                          éditer
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (window.confirm("Supprimer ce contact ?")) handleDelete(c.id);
+                          }}
+                          className="text-xs text-[var(--text-muted)] hover:text-[var(--status-critical)]"
+                        >
+                          suppr.
+                        </button>
+                      </div>
+                    </div>
                     <div className="mt-0.5 text-xs capitalize text-[var(--text-muted)]">{c.contact_type} · {c.source}</div>
                     {c.estimated_aum > 0 && (
                       <div className="tabular mt-1 text-xs text-[var(--text-secondary)]">
@@ -104,6 +123,20 @@ export function CrmPage() {
           );
         })}
       </div>
+
+      <Modal
+        open={modal !== null}
+        onClose={() => setModal(null)}
+        title={modal?.type === "edit" ? "Modifier le contact" : "Nouveau contact"}
+        wide
+      >
+        <CrmContactForm
+          initial={modal?.type === "edit" ? modal.contact : undefined}
+          users={users.data ?? []}
+          onSubmit={handleSubmit}
+          onCancel={() => setModal(null)}
+        />
+      </Modal>
     </div>
   );
 }

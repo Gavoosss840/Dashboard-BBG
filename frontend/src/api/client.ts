@@ -1,6 +1,7 @@
 import type {
   AllocationResult,
   Client,
+  ClientInput,
   ClientSummary,
   ComplianceDocument,
   ComplianceSummary,
@@ -11,11 +12,16 @@ import type {
   FXRate,
   GlobalPortfolio,
   Mandate,
+  MandateInput,
   NewsItem,
   Portfolio,
+  PortfolioInput,
+  Position,
+  PositionInput,
   ReferenceEntry,
   Transaction,
   User,
+  UserInput,
   WatchlistItem,
 } from "./types";
 
@@ -39,9 +45,24 @@ export const api = {
 
   clients: (ccy: string) => request<ClientSummary[]>(`/api/clients?ccy=${ccy}`),
   client: (id: number, ccy: string) => request<Client>(`/api/clients/${id}?ccy=${ccy}`),
+  createClient: (payload: ClientInput, ccy = "EUR") =>
+    request<Client>(`/api/clients?ccy=${ccy}`, { method: "POST", body: JSON.stringify(payload) }),
+  updateClient: (id: number, payload: Partial<ClientInput>, ccy = "EUR") =>
+    request<Client>(`/api/clients/${id}?ccy=${ccy}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deleteClient: (id: number) => request<{ ok: boolean }>(`/api/clients/${id}`, { method: "DELETE" }),
 
   globalPortfolio: (ccy: string) => request<GlobalPortfolio>(`/api/portfolios/global?ccy=${ccy}`),
   portfolio: (id: number, ccy: string) => request<Portfolio>(`/api/portfolios/${id}?ccy=${ccy}`),
+  createPortfolio: (payload: PortfolioInput) =>
+    request<Portfolio>(`/api/portfolios`, { method: "POST", body: JSON.stringify(payload) }),
+  updatePortfolio: (id: number, payload: Partial<PortfolioInput>) =>
+    request<Portfolio>(`/api/portfolios/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deletePortfolio: (id: number) => request<{ ok: boolean }>(`/api/portfolios/${id}`, { method: "DELETE" }),
+  createPosition: (portfolioId: number, payload: PositionInput) =>
+    request<Position>(`/api/portfolios/${portfolioId}/positions`, { method: "POST", body: JSON.stringify(payload) }),
+  updatePosition: (id: number, payload: Partial<PositionInput>) =>
+    request<Position>(`/api/portfolios/positions/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deletePosition: (id: number) => request<{ ok: boolean }>(`/api/portfolios/positions/${id}`, { method: "DELETE" }),
 
   transactions: (params?: { status?: string; client_id?: number }) => {
     const q = new URLSearchParams();
@@ -61,6 +82,11 @@ export const api = {
     ),
 
   mandates: () => request<Mandate[]>(`/api/mandates`),
+  createMandate: (payload: MandateInput) =>
+    request<Mandate>(`/api/mandates`, { method: "POST", body: JSON.stringify(payload) }),
+  updateMandate: (id: number, payload: Partial<MandateInput>) =>
+    request<Mandate>(`/api/mandates/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deleteMandate: (id: number) => request<{ ok: boolean }>(`/api/mandates/${id}`, { method: "DELETE" }),
 
   feeEnginePreview: (ccy: string) => request<FeeEnginePreview[]>(`/api/financier/fee-engine/preview?ccy=${ccy}`),
   generateManagementFee: (mandateId: number) =>
@@ -87,6 +113,7 @@ export const api = {
     request<CrmContact>(`/api/crm/contacts`, { method: "POST", body: JSON.stringify(payload) }),
   updateCrmContact: (id: number, payload: Partial<CrmContact>) =>
     request<CrmContact>(`/api/crm/contacts/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deleteCrmContact: (id: number) => request<{ ok: boolean }>(`/api/crm/contacts/${id}`, { method: "DELETE" }),
 
   watchlist: () => request<WatchlistItem[]>(`/api/market/watchlist`),
   addWatchlistItem: (payload: Partial<WatchlistItem> & { ticker: string; name: string; last_price: number }) =>
@@ -108,6 +135,10 @@ export const api = {
     request<ReferenceEntry[]>(`/api/reference${category ? `?category=${category}` : ""}`),
 
   users: () => request<User[]>(`/api/users`),
+  createUser: (payload: UserInput) => request<User>(`/api/users`, { method: "POST", body: JSON.stringify(payload) }),
+  updateUser: (id: number, payload: Partial<UserInput>) =>
+    request<User>(`/api/users/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deleteUser: (id: number) => request<{ ok: boolean }>(`/api/users/${id}`, { method: "DELETE" }),
 
   allocation: (ccy: string) => request<AllocationResult>(`/api/allocation?ccy=${ccy}`),
 
