@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import { useApi } from "../lib/useApi";
 import { Card } from "../components/ui/Card";
@@ -122,7 +123,14 @@ export function MarketPage() {
               <tbody>
                 {watchlist.data.map((w) => (
                   <tr key={w.id} className="border-t border-white/5">
-                    <td className="py-2 font-medium">{w.ticker}</td>
+                    <td className="py-2 font-medium">
+                      <Link
+                        to={`/security/${encodeURIComponent(w.data_symbol ?? w.ticker)}`}
+                        className="hover:text-[var(--series-1)] hover:underline"
+                      >
+                        {w.ticker}
+                      </Link>
+                    </td>
                     <td className="py-2 text-[var(--text-secondary)]">{w.name}</td>
                     <td className="py-2 capitalize text-[var(--text-secondary)]">{w.asset_class}</td>
                     <td className="tabular py-2 text-right">{formatMoney(w.last_price, w.currency)}</td>

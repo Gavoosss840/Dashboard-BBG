@@ -169,6 +169,7 @@ historique NAV, cash-flows, transactions et documents de compliance associés.
 | Mandats | `/mandates` | Répertoire des mandats de gestion (frais d'entrée/gestion/sortie/performance, hurdle, HWM, benchmark) |
 | CRM | `/crm` | Pipeline prospects/clients en kanban |
 | Watchlist & News | `/market` | Watchlist éditable + fil d'actualités |
+| Page titre | `/security/:symbol` | Page complète par valeur : cours quasi temps réel, graphique 1J→MAX, fondamentaux, profil société, actualités, détention interne |
 | Earnings | `/earnings` | Calendrier de résultats avec alertes on/off |
 | Allocation de capital | `/allocation` | Outil de répartition Stock Picking / Arbitrage Algo (risk parity) |
 | Référence | `/reference` | Glossaire, structure des frais, procédures internes |
@@ -176,6 +177,32 @@ historique NAV, cash-flows, transactions et documents de compliance associés.
 
 Devise d'affichage commutable (USD/EUR/CHF/HKD/JPY/GBP/AED) en haut à droite —
 tous les montants sont reconvertis à la volée via `/api/fx/rates`.
+
+## Terminal de marché
+
+Trois éléments transverses, présents sur toutes les pages :
+
+- **Bande de cotation défilante** (sous la barre du haut) : les valeurs de la
+  watchlist avec prix et variation du jour, rafraîchies toutes les 30 s.
+  Cliquer une valeur ouvre sa page titre ; survoler met la bande en pause.
+  Si Yahoo est injoignable, la bande affiche la dernière valeur connue (grisée).
+- **Barre de commande `Ctrl+K`** (ou le bouton ⌕ en haut) : recherche
+  instantanée sur les marchés mondiaux (actions, ETF, indices, crypto — via
+  Yahoo), sur les clients et sur les pages de la plateforme. Navigation au
+  clavier (↑ ↓, Entrée, Échap).
+- **Page titre `/security/:symbol`** : le cœur du terminal. Prix rafraîchi
+  toutes les 15 s, plage du jour et 52 semaines, graphique de cours sur
+  8 périodes (1J, 5J, 1M, 6M, YTD, 1A, 5A, MAX), fondamentaux et consensus
+  analystes (capitalisation, PER, BPA, dividende, bêta, marge, croissance,
+  objectif de cours), profil complet de la société, actualités, bouton
+  watchlist, et le croisement avec **vos portefeuilles** (quels clients
+  détiennent le titre, quantités, PRU). Tous les tickers de la plateforme
+  (watchlist, positions, blotter) sont cliquables et mènent à cette page.
+
+Précision honnête sur le « temps réel » : les cours viennent de Yahoo Finance
+en polling (15–30 s). C'est du temps réel pour les places US ; certaines
+bourses (selon les licences Yahoo) peuvent être différées de 15 min. Le vrai
+streaming tick-par-tick nécessiterait IB Gateway — étape ultérieure prévue.
 
 ## Allocation de capital — méthode
 
@@ -226,10 +253,15 @@ l'année, puis repasser sur *Last Business Day*.
 
 ## Données de marché (gratuit)
 
-- **Prix** : Yahoo Finance (fin de journée) pour la watchlist et pour
-  rafraîchir les positions entre deux synchros IBKR. Pour les places
+- **Prix** : Yahoo Finance — quasi temps réel sur la bande de cotation et les
+  pages titres (polling 15–30 s), et rafraîchissement périodique des prix
+  stockés (watchlist, positions) entre deux synchros IBKR. Pour les places
   étrangères, renseigner le « symbole data » (ex : `0700.HK`, `MC.PA`,
   `NESN.SW`) dans la watchlist.
+- **Fondamentaux, profil société, recherche et actualités** : Yahoo Finance
+  (`backend/app/services/securities.py`). L'accès aux fondamentaux passe par
+  le mécanisme cookie+crumb de Yahoo ; si Yahoo le durcit un jour, la page
+  titre dégrade proprement (cours et graphique restent).
 - **Taux de change** : open.er-api.com (taux réels, AED inclus), rafraîchis
   au démarrage et à la demande.
 - La couche est abstraite dans `backend/app/services/market_data.py` pour
@@ -246,11 +278,9 @@ performance présentable à un client ou un régulateur.
 
 ## Pistes d'amélioration restantes
 
+- Moteur d'alertes + centre de notifications (prix cible, drawdown, earnings,
+  échéances compliance) — prochain chantier
 - Module de risque (VaR, stress test, corrélations, concentration)
 - Reporting client automatisé (PDF/Excel, TWR/IRR vs benchmark)
-- Audit trail immuable sur les transactions
-- RBAC : le login protège tout, mais tout utilisateur connecté a les mêmes
-  droits aujourd'hui — pas encore de restriction par rôle (admin/associé/lecture seule)
-- Alerting multi-canal (email/SMS/push) sur drawdown, margin call, earnings
 - Abstraction multi-custodian (au-delà d'IBKR)
 - Data room pour les futurs documents de souscription du fonds

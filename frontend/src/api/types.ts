@@ -447,3 +447,104 @@ export interface AuditLog {
   path: string;
   status_code: number;
 }
+
+export interface TapeQuote {
+  symbol: string;
+  display: string;
+  price: number | null;
+  change_pct: number | null;
+  currency: string;
+  stale: boolean;
+}
+
+export interface SecurityQuote {
+  symbol: string;
+  name: string;
+  currency: string;
+  exchange: string;
+  price: number;
+  previous_close: number | null;
+  change_pct: number;
+  day_high: number | null;
+  day_low: number | null;
+  volume: number | null;
+  fifty_two_week_high: number | null;
+  fifty_two_week_low: number | null;
+  instrument_type: string;
+}
+
+export interface ChartPoint {
+  t: number;
+  c: number;
+  v: number;
+}
+
+export interface SecurityChart {
+  symbol: string;
+  currency: string;
+  range: string;
+  previous_close: number | null;
+  points: ChartPoint[];
+}
+
+export interface SecuritySearchQuote {
+  symbol: string;
+  name: string;
+  exchange: string;
+  type: string;
+  sector: string | null;
+  industry: string | null;
+}
+
+export interface SecurityNewsItem {
+  title: string;
+  publisher: string;
+  link: string;
+  published_at: number | null;
+}
+
+export interface SecuritySearchResult {
+  quotes: SecuritySearchQuote[];
+  news: SecurityNewsItem[];
+}
+
+export interface SecurityFundamentals {
+  market_cap: number | null;
+  trailing_pe: number | null;
+  forward_pe: number | null;
+  eps: number | null;
+  dividend_yield: number | null;
+  beta: number | null;
+  avg_volume: number | null;
+  profit_margin: number | null;
+  revenue: number | null;
+  revenue_growth: number | null;
+  target_mean_price: number | null;
+  recommendation: string | null;
+  num_analysts: number | null;
+  sector: string | null;
+  industry: string | null;
+  employees: number | null;
+  website: string | null;
+  country: string | null;
+  description: string | null;
+}
+
+export interface SecurityHolding {
+  client_id: number | null;
+  client_name: string;
+  ptf_id: string;
+  quantity: number;
+  avg_cost: number;
+  currency: string;
+}
+
+export interface SecurityOverview {
+  quote: SecurityQuote;
+  fundamentals: SecurityFundamentals | null;
+  news: SecurityNewsItem[];
+  holdings: SecurityHolding[];
+  total_quantity: number;
+  in_watchlist: boolean;
+  watchlist_item_id: number | null;
+}

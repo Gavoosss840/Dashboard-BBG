@@ -25,8 +25,13 @@ import type {
   Position,
   PositionInput,
   ReferenceEntry,
+  SecurityChart,
+  SecurityOverview,
+  SecurityQuote,
+  SecuritySearchResult,
   SyncLog,
   SyncStatus,
+  TapeQuote,
   Trade,
   Transaction,
   TokenResponse,
@@ -215,6 +220,15 @@ export const api = {
   triggerMarketRefresh: () => request<SyncLog>(`/api/sync/market-data`, { method: "POST" }),
   triggerBackup: () => request<SyncLog>(`/api/sync/backup`, { method: "POST" }),
   auditLogs: (limit = 200) => request<AuditLog[]>(`/api/audit?limit=${limit}`),
+
+  securitiesSearch: (q: string) =>
+    request<SecuritySearchResult>(`/api/securities/search?q=${encodeURIComponent(q)}`),
+  securitiesTape: () => request<TapeQuote[]>(`/api/securities/tape`),
+  securityQuote: (symbol: string) => request<SecurityQuote>(`/api/securities/${encodeURIComponent(symbol)}/quote`),
+  securityChart: (symbol: string, range: string) =>
+    request<SecurityChart>(`/api/securities/${encodeURIComponent(symbol)}/chart?range=${range}`),
+  securityOverview: (symbol: string) =>
+    request<SecurityOverview>(`/api/securities/${encodeURIComponent(symbol)}/overview`),
 
   aumTargets: (ccy: string) => request<AumTarget[]>(`/api/financier/aum-targets?ccy=${ccy}`),
   createAumTarget: (payload: AumTargetInput, ccy = "EUR") =>

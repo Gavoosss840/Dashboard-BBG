@@ -372,7 +372,14 @@ export function ClientDetailPage() {
               <tbody>
                 {p.positions.map((pos) => (
                   <tr key={pos.id} className="border-t border-white/5">
-                    <td className="py-2 font-medium">{pos.ticker}</td>
+                    <td className="py-2 font-medium">
+                      <Link
+                        to={`/security/${encodeURIComponent(pos.ticker)}`}
+                        className="hover:text-[var(--series-1)] hover:underline"
+                      >
+                        {pos.ticker}
+                      </Link>
+                    </td>
                     <td className="py-2 text-[var(--text-secondary)]">{pos.name}</td>
                     <td className="py-2 capitalize text-[var(--text-secondary)]">{pos.asset_class}</td>
                     <td className="tabular py-2 text-right">{formatNumber(pos.quantity, pos.asset_class === "crypto" ? 4 : 2)}</td>
@@ -494,7 +501,14 @@ function PortfolioTrades({ portfolioId }: { portfolioId: number }) {
                     {t.side === "BUY" ? "Achat" : "Vente"}
                   </span>
                 </td>
-                <td className="py-1.5 font-medium">{t.ticker}</td>
+                <td className="py-1.5 font-medium">
+                  <Link
+                    to={`/security/${encodeURIComponent(t.ticker)}`}
+                    className="hover:text-[var(--series-1)] hover:underline"
+                  >
+                    {t.ticker}
+                  </Link>
+                </td>
                 <td className="tabular py-1.5 text-right">{formatNumber(t.quantity, 2)}</td>
                 <td className="tabular py-1.5 text-right">{formatMoney(t.price, t.currency)}</td>
                 <td className="tabular py-1.5 text-right text-[var(--text-muted)]">{formatMoney(t.commission, t.currency)}</td>

@@ -13,6 +13,13 @@ export function TopBar() {
         {new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
       </div>
       <div className="flex items-center gap-3">
+        <button
+          onClick={() => window.dispatchEvent(new Event("commandbar:open"))}
+          className="flex items-center gap-2 rounded border border-white/10 bg-[var(--surface-2)] px-3 py-1.5 text-xs text-[var(--text-muted)] hover:border-white/20"
+        >
+          ⌕ Rechercher un titre, un client…
+          <kbd className="rounded border border-white/15 px-1 py-0.5 text-[10px]">Ctrl K</kbd>
+        </button>
         <CurrencySwitcher />
         <div className="relative">
           <button

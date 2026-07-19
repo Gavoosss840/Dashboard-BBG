@@ -1,0 +1,110 @@
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session, joinedload
+
+from app import models
+from app.database import get_db
+from app.services import securities
+
+router = APIRouter(prefix="/api/securities", tags=["securities"])
+
+
+def _root_symbol(symbol: str) -> str:
+    """IBKR/display tickers don't carry Yahoo suffixes: '0700.HK' -> '0700'."""
+    return symbol.split(".")[0].upper()
+
+
+@router.get("/search")
+def search_securities(q: str = Query(..., min_length=1)):
+    return securities.search(q)
+
+
+@router.get("/tape")
+def ticker_tape(db: Session = Depends(get_db)):
+    """Quotes for every watchlist item, for the scrolling tape."""
+    items = db.query(models.WatchlistItem).order_by(models.WatchlistItem.ticker).all()
+    symbols = [(item.data_symbol or item.ticker) for item in items]
+    quotes = securities.fetch_quotes(symbols)
+    out = []
+    for item, symbol in zip(items, symbols):
+        quote = quotes.get(symbol)
+        if quote is None:
+            out.append({
+                "symbol": symbol, "display": item.ticker,
+                "price": item.last_price, "change_pct": item.day_change_pct,
+                "currency": item.currency, "stale": True,
+            })
+        else:
+            out.append({
+                "symbol": symbol, "display": item.ticker,
+                "price": quote["price"], "change_pct": quote["change_pct"],
+                "currency": quote["currency"], "stale": False,
+            })
+    return out
+
+
+@router.get("/{symbol}/chart")
+def security_chart(symbol: str, range: str = Query("1mo")):
+    chart = securities.fetch_chart(symbol, range)
+    if chart is None:
+        raise HTTPException(status_code=404, detail=f"Pas de données graphique pour {symbol} (période {range}).")
+    return chart
+
+
+@router.get("/{symbol}/quote")
+def security_quote(symbol: str):
+    quote = securities.fetch_quote(symbol)
+    if quote is None:
+        raise HTTPException(status_code=404, detail=f"Titre introuvable: {symbol}")
+    return quote
+
+
+@router.get("/{symbol}/overview")
+def security_overview(symbol: str, db: Session = Depends(get_db)):
+    quote = securities.fetch_quote(symbol)
+    if quote is None:
+        raise HTTPException(status_code=404, detail=f"Titre introuvable: {symbol}")
+
+    fundamentals = securities.fetch_fundamentals(symbol)
+    news = securities.search(symbol, quotes_count=0, news_count=8)["news"]
+
+    # Cross-reference with internal portfolios (positions use the IBKR/display ticker)
+    root = _root_symbol(symbol)
+    positions = (
+        db.query(models.Position)
+        .options(joinedload(models.Position.portfolio).joinedload(models.Portfolio.client))
+        .all()
+    )
+    holdings = []
+    total_qty = 0.0
+    for pos in positions:
+        if pos.ticker.upper() != root:
+            continue
+        client = pos.portfolio.client if pos.portfolio else None
+        holdings.append({
+            "client_id": client.id if client else None,
+            "client_name": client.name if client else "?",
+            "ptf_id": pos.portfolio.ptf_id if pos.portfolio else "",
+            "quantity": pos.quantity,
+            "avg_cost": pos.avg_cost,
+            "currency": pos.currency,
+        })
+        total_qty += pos.quantity
+
+    watch = (
+        db.query(models.WatchlistItem)
+        .filter(
+            (models.WatchlistItem.data_symbol == symbol)
+            | (models.WatchlistItem.ticker == root)
+        )
+        .first()
+    )
+
+    return {
+        "quote": quote,
+        "fundamentals": fundamentals,
+        "news": news,
+        "holdings": holdings,
+        "total_quantity": total_qty,
+        "in_watchlist": watch is not None,
+        "watchlist_item_id": watch.id if watch else None,
+    }

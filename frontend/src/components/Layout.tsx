@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
+import { TickerTape } from "./TickerTape";
+import { CommandBar } from "./CommandBar";
 
 export function Layout({ children }: { children: ReactNode }) {
   return (
@@ -8,8 +10,10 @@ export function Layout({ children }: { children: ReactNode }) {
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar />
+        <TickerTape />
         <main className="flex-1 overflow-y-auto p-5">{children}</main>
       </div>
+      <CommandBar />
     </div>
   );
 }

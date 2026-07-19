@@ -45,6 +45,27 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* Ticker tape: the track holds two copies of the content and slides by
+   exactly one copy's width (-50%), so the loop is seamless. */
+@keyframes tape-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.tape-track {
+  display: flex;
+  width: max-content;
+  animation: tape-scroll var(--tape-duration, 40s) linear infinite;
+}
+
+.tape-track:hover {
+  animation-play-state: paused;
+}
+
 table th:not(:last-child),
 table td:not(:last-child) {
   padding-right: 16px;
