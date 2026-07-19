@@ -14,7 +14,7 @@ modifie entièrement depuis l'interface — voir "CRUD complet" ci-dessous.
 - **Backend**: FastAPI + SQLAlchemy + SQLite (`backend/`)
 - **Frontend**: React + TypeScript + Vite + Tailwind v4 + Recharts (`frontend/`)
 
-## Authentification
+## Authentification & sécurité
 
 Toute l'API (sauf `/api/health` et les endpoints de login) exige un token —
 sans compte, aucune donnée n'est accessible. Au tout premier lancement,
@@ -23,14 +23,34 @@ l'application affiche un écran de **création du compte administrateur**
 compte n'existe. Ensuite, c'est un écran de connexion classique.
 
 Le token de session vit dans `sessionStorage` du navigateur : il survit à un
-rafraîchissement de page mais disparaît à la fermeture de l'onglet/navigateur
-— il faut alors se reconnecter.
+rafraîchissement de page mais disparaît à la fermeture de l'onglet/navigateur.
 
-**Avant d'exposer la plateforme au-delà de ton propre poste** (ex: accès
-distant, VPS), change impérativement `AUTH_SECRET_KEY` dans
-`docker-compose.yml` (ou en variable d'environnement) pour une longue chaîne
-aléatoire — sinon n'importe qui connaissant la valeur par défaut du code
-source pourrait forger un token valide.
+- **Clé de signature** : générée aléatoirement au premier démarrage et
+  stockée dans le volume de données (`auth_secret.key`) — aucune valeur par
+  défaut forgeable. `AUTH_SECRET_KEY` en variable d'environnement permet
+  d'imposer sa propre clé.
+- **Anti brute-force** : 5 échecs de connexion sur un email → compte
+  verrouillé 15 minutes (HTTP 429).
+- **Rôles appliqués (RBAC)** :
+  | Rôle | Droits |
+  |---|---|
+  | `admin` | Tout, y compris gestion des utilisateurs, suppression de clients, journal d'audit |
+  | `associate` / `analyst` | Tout sauf gestion des utilisateurs et suppression de clients |
+  | `viewer` | Lecture seule (peut changer son propre mot de passe) |
+- **Journal d'audit** (`/audit`, admins uniquement) : trace immuable de
+  chaque action de modification — qui, quoi, quand, résultat — y compris les
+  tentatives de connexion et les actions refusées. Les corps de requêtes ne
+  sont jamais stockés (ils peuvent contenir des mots de passe).
+
+## Sauvegardes
+
+La base est sauvegardée automatiquement **une fois par jour** (et à la
+demande depuis la page Données & Synchro) dans le dossier `backups/` du
+projet, directement sur ta machine — il survit même à un
+`docker compose down -v`. Les 30 dernières copies sont conservées.
+Recommandé : synchroniser ce dossier vers OneDrive/Drive pour une copie hors
+machine. Pour restaurer : arrêter la plateforme, remplacer la base du volume
+par le fichier de sauvegarde choisi, redémarrer.
 
 ## Lancer en local — le plus simple
 

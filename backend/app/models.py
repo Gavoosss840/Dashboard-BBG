@@ -320,11 +320,28 @@ class SyncLog(Base):
     __tablename__ = "sync_logs"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    kind: Mapped[str] = mapped_column(String(20))  # ibkr / market_data
+    kind: Mapped[str] = mapped_column(String(20))  # ibkr / market_data / backup
     started_at: Mapped[dt.datetime] = mapped_column(DateTime)
     finished_at: Mapped[dt.datetime | None] = mapped_column(DateTime, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="running")  # running / success / error
     message: Mapped[str] = mapped_column(Text, default="")
+
+
+class AuditLog(Base):
+    """Immutable trail of every mutating API call: who did what, when.
+
+    Deliberately append-only — there is no update/delete endpoint for it.
+    Request bodies are never stored (they can contain passwords)."""
+
+    __tablename__ = "audit_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    timestamp: Mapped[dt.datetime] = mapped_column(DateTime)
+    user_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    user_name: Mapped[str] = mapped_column(String(160), default="")
+    method: Mapped[str] = mapped_column(String(10))
+    path: Mapped[str] = mapped_column(String(300))
+    status_code: Mapped[int] = mapped_column(Integer)
 
 
 class AumTarget(Base):

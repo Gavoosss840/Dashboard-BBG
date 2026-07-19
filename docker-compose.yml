@@ -5,11 +5,16 @@ services:
       - "8000:8000"
     volumes:
       - backend-data:/app/data
+      # Sauvegardes quotidiennes de la base, écrites directement sur ta machine
+      # (dossier backups/ du projet) — elles survivent à un reset Docker.
+      - ./backups:/app/backups
     environment:
       - DATABASE_URL=sqlite:////app/data/boulet_capital.db
-      # Change this to a long random string before exposing the platform
-      # beyond your own machine — it signs the login sessions.
-      - AUTH_SECRET_KEY=boulet-capital-dev-secret-change-me
+      - BACKUP_DIR=/app/backups
+      # La clé qui signe les sessions est générée automatiquement (aléatoire)
+      # au premier démarrage et stockée dans le volume. Décommente uniquement
+      # pour imposer ta propre clé :
+      # - AUTH_SECRET_KEY=
       # Connexion Interactive Brokers (Flex Web Service) — voir la page
       # "Données & Synchro" de la plateforme pour le guide pas-à-pas.
       # Ces valeurs restent sur TA machine, ne les partage jamais.

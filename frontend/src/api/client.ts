@@ -1,5 +1,6 @@
 import type {
   AllocationResult,
+  AuditLog,
   AumTarget,
   AumTargetInput,
   BootstrapStatus,
@@ -67,7 +68,15 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   }
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`API error ${res.status} on ${path}: ${body}`);
+    // Surface FastAPI's "detail" as a clean message when present
+    let message = `API error ${res.status} on ${path}: ${body}`;
+    try {
+      const parsed = JSON.parse(body);
+      if (typeof parsed?.detail === "string") message = parsed.detail;
+    } catch {
+      // body wasn't JSON — keep the raw message
+    }
+    throw new Error(message);
   }
   if (res.status === 204) return undefined as T;
   return res.json();
@@ -204,6 +213,8 @@ export const api = {
   syncStatus: () => request<SyncStatus>(`/api/sync/status`),
   triggerIbkrSync: () => request<SyncLog>(`/api/sync/ibkr`, { method: "POST" }),
   triggerMarketRefresh: () => request<SyncLog>(`/api/sync/market-data`, { method: "POST" }),
+  triggerBackup: () => request<SyncLog>(`/api/sync/backup`, { method: "POST" }),
+  auditLogs: (limit = 200) => request<AuditLog[]>(`/api/audit?limit=${limit}`),
 
   aumTargets: (ccy: string) => request<AumTarget[]>(`/api/financier/aum-targets?ccy=${ccy}`),
   createAumTarget: (payload: AumTargetInput, ccy = "EUR") =>

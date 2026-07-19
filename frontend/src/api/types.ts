@@ -435,4 +435,15 @@ export interface SyncStatus {
   ibkr_configured: boolean;
   last_ibkr_sync: SyncLog | null;
   last_market_refresh: SyncLog | null;
+  last_backup: SyncLog | null;
+}
+
+export interface AuditLog {
+  id: number;
+  timestamp: string;
+  user_id: number | null;
+  user_name: string;
+  method: string;
+  path: string;
+  status_code: number;
 }

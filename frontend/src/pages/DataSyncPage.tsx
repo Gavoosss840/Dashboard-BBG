@@ -26,7 +26,7 @@ function SyncResult({ log }: { log: SyncLog | null }) {
 
 export function DataSyncPage() {
   const { data, loading, error, reload } = useApi(() => api.syncStatus(), []);
-  const [busy, setBusy] = useState<"ibkr" | "market" | null>(null);
+  const [busy, setBusy] = useState<"ibkr" | "market" | "backup" | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
   async function runIbkr() {
@@ -47,6 +47,19 @@ export function DataSyncPage() {
     setActionError(null);
     try {
       await api.triggerMarketRefresh();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(null);
+      reload();
+    }
+  }
+
+  async function runBackup() {
+    setBusy("backup");
+    setActionError(null);
+    try {
+      await api.triggerBackup();
     } catch (err) {
       setActionError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -114,6 +127,28 @@ export function DataSyncPage() {
           <SyncResult log={data.last_market_refresh} />
         </Card>
       </div>
+
+      <Card
+        className="mt-4"
+        title="Sauvegardes de la base de données"
+        action={
+          <button
+            onClick={runBackup}
+            disabled={busy !== null}
+            className="rounded bg-[var(--series-1)] px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+          >
+            {busy === "backup" ? "Sauvegarde…" : "Sauvegarder maintenant"}
+          </button>
+        }
+      >
+        <p className="mb-3 text-sm text-[var(--text-secondary)]">
+          Sauvegarde automatique quotidienne de toute la base (clients, positions, transactions…) dans le dossier{" "}
+          <code className="rounded bg-white/10 px-1">backups/</code> du projet sur ta machine — les 30 dernières sont
+          conservées. Ce dossier survit même à un reset Docker complet ; pense à le synchroniser vers OneDrive/Drive pour
+          avoir une copie hors machine.
+        </p>
+        <SyncResult log={data.last_backup} />
+      </Card>
 
       <Card className="mt-4" title="Guide — connecter tes comptes IBKR (une seule fois)">
         <ol className="list-decimal space-y-3 pl-5 text-sm text-[var(--text-secondary)]">

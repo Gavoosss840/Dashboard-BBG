@@ -1,6 +1,7 @@
 import { NavLink } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
-const SECTIONS: { label: string; items: { to: string; label: string }[] }[] = [
+const SECTIONS: { label: string; items: { to: string; label: string; adminOnly?: boolean }[] }[] = [
   {
     label: "Vue d'ensemble",
     items: [{ to: "/", label: "Dashboard" }],
@@ -38,11 +39,15 @@ const SECTIONS: { label: string; items: { to: string; label: string }[] }[] = [
   },
   {
     label: "Organisation",
-    items: [{ to: "/users", label: "Users" }],
+    items: [
+      { to: "/users", label: "Users" },
+      { to: "/audit", label: "Journal d'audit", adminOnly: true },
+    ],
   },
 ];
 
 export function Sidebar() {
+  const { user } = useAuth();
   return (
     <aside className="flex h-full w-56 shrink-0 flex-col border-r border-white/10 bg-[var(--surface-1)]">
       <div className="border-b border-white/10 px-4 py-4">
@@ -55,7 +60,9 @@ export function Sidebar() {
             <div className="px-2 pb-1 text-[10px] uppercase tracking-wider text-[var(--text-muted)]">
               {section.label}
             </div>
-            {section.items.map((item) => (
+            {section.items
+              .filter((item) => !item.adminOnly || user?.role === "admin")
+              .map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}

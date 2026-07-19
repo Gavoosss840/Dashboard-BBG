@@ -2,7 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app import models, schemas
-from app.auth import create_access_token, hash_password, verify_password
+from app.auth import (
+    create_access_token,
+    hash_password,
+    is_locked_out,
+    record_failed_login,
+    reset_failed_logins,
+    verify_password,
+)
 from app.database import get_db
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -62,11 +69,19 @@ def bootstrap(body: schemas.BootstrapRequest, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=schemas.TokenResponse)
 def login(body: schemas.LoginRequest, db: Session = Depends(get_db)):
+    lockout = is_locked_out(body.email)
+    if lockout > 0:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Trop de tentatives échouées — réessayez dans {max(lockout // 60, 1)} min.",
+        )
     user = db.query(models.User).filter(models.User.email == body.email).first()
     if not user or not user.hashed_password or not verify_password(body.password, user.hashed_password):
+        record_failed_login(body.email)
         raise HTTPException(status_code=401, detail="Email ou mot de passe incorrect.")
     if not user.active:
         raise HTTPException(status_code=403, detail="Ce compte est désactivé.")
+    reset_failed_logins(body.email)
     token = create_access_token(user.id, user.email)
     return schemas.TokenResponse(access_token=token, user=_user_to_out(user))
 

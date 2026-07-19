@@ -15,3 +15,8 @@ frontend/.vite/
 .DS_Store
 .vscode/
 .idea/
+
+# Database backups (contain real client data — never commit)
+backups/
+backend/backups/
+backend/auth_secret.key

@@ -428,6 +428,17 @@ class SyncStatusOut(BaseModel):
     ibkr_configured: bool
     last_ibkr_sync: SyncLogOut | None = None
     last_market_refresh: SyncLogOut | None = None
+    last_backup: SyncLogOut | None = None
+
+
+class AuditLogOut(ORMBase):
+    id: int
+    timestamp: dt.datetime
+    user_id: int | None
+    user_name: str
+    method: str
+    path: str
+    status_code: int
 
 
 class NewsItemOut(ORMBase):
