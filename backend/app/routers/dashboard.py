@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, joinedload
 from app import models, schemas
 from app.database import get_db
 from app.deps import fx_rates, target_currency
-from app.utils import AS_OF, business_days_between
+from app.utils import business_days_between, today
 from app.services import fx, pnl
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
@@ -15,7 +15,7 @@ router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
 def _combined_nav_history(portfolios: list[models.Portfolio], rates: dict, ccy: str) -> list[schemas.NavPointOut]:
     series_by_portfolio = []
-    earliest = AS_OF
+    earliest = today()
     for p in portfolios:
         rows = sorted(p.nav_history, key=lambda n: n.date)
         if not rows:
@@ -25,10 +25,10 @@ def _combined_nav_history(portfolios: list[models.Portfolio], rates: dict, ccy: 
         series_by_portfolio.append((dates, navs))
         earliest = min(earliest, dates[0])
 
-    all_days = business_days_between(earliest, AS_OF)
+    all_days = business_days_between(earliest, today())
     sampled_days = all_days[::5] if len(all_days) > 5 else all_days
-    if sampled_days and sampled_days[-1] != AS_OF:
-        sampled_days.append(AS_OF)
+    if sampled_days and sampled_days[-1] != today():
+        sampled_days.append(today())
 
     points = []
     for day in sampled_days:
@@ -66,7 +66,7 @@ def get_dashboard(
     summaries = []
 
     for c in clients:
-        agg = pnl.client_aggregate(c, rates, ccy, AS_OF)
+        agg = pnl.client_aggregate(c, rates, ccy, today())
         total_aum += agg["current_nav"]
         pnl_ytd += agg["pnl_ytd"]
         pnl_since_inception += agg["pnl_since_inception"]
@@ -90,7 +90,7 @@ def get_dashboard(
         for t in db.query(models.Transaction).filter(models.Transaction.status.in_(["draft", "invoiced", "pending"])).all()
     )
     upcoming_earnings = (
-        db.query(models.EarningsEvent).filter(models.EarningsEvent.event_date >= AS_OF).count()
+        db.query(models.EarningsEvent).filter(models.EarningsEvent.event_date >= today()).count()
     )
     open_crm_leads = (
         db.query(models.CrmContact)
@@ -101,7 +101,7 @@ def get_dashboard(
     top_clients = sorted(summaries, key=lambda s: s.current_nav, reverse=True)[:5]
 
     return schemas.DashboardOut(
-        as_of=AS_OF,
+        as_of=today(),
         total_aum=total_aum,
         currency=ccy,
         num_clients=len(clients),

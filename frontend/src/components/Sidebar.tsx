@@ -32,6 +32,7 @@ const SECTIONS: { label: string; items: { to: string; label: string }[] }[] = [
     label: "Outils",
     items: [
       { to: "/allocation", label: "Allocation de capital" },
+      { to: "/data", label: "Données & Synchro" },
       { to: "/reference", label: "Référence" },
     ],
   },

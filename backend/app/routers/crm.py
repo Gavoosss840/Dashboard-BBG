@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app import models, schemas
 from app.database import get_db
-from app.utils import AS_OF
+from app.utils import today
 
 router = APIRouter(prefix="/api/crm", tags=["crm"])
 
@@ -53,7 +53,7 @@ def list_contacts(db: Session = Depends(get_db)):
 def create_contact(body: CrmContactIn, db: Session = Depends(get_db)):
     contact = models.CrmContact(
         **body.model_dump(),
-        last_contact_date=AS_OF,
+        last_contact_date=today(),
     )
     db.add(contact)
     db.commit()
@@ -68,7 +68,7 @@ def update_contact(contact_id: int, body: CrmContactUpdate, db: Session = Depend
         raise HTTPException(status_code=404, detail="Contact not found")
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(contact, field, value)
-    contact.last_contact_date = AS_OF
+    contact.last_contact_date = today()
     db.commit()
     db.refresh(contact)
     return contact

@@ -39,7 +39,9 @@ def preview(
     days = max((period_end - period_start).days, 0)
 
     nav_start_base = pnl.client_nav_at(client, rates, base_ccy, period_start)
-    nav_end_base = pnl.client_nav_at(client, rates, base_ccy, period_end)
+    # End of period = now, so use the live NAV (cash + positions at current
+    # marks) rather than the last historical snapshot.
+    nav_end_base = pnl.client_current_nav(client, rates, base_ccy)
     avg_nav_base = (nav_start_base + nav_end_base) / 2
     mgmt_fee_base = avg_nav_base * (mandate.mgmt_fee_pct / 100) * (days / 365)
 

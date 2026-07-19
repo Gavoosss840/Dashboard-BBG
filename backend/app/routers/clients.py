@@ -7,7 +7,7 @@ from app import models, schemas
 from app.database import get_db
 from app.deps import fx_rates, target_currency
 from app.services import pnl
-from app.utils import AS_OF
+from app.utils import today
 
 router = APIRouter(prefix="/api/clients", tags=["clients"])
 
@@ -18,12 +18,13 @@ def _client_query(db: Session):
         joinedload(models.Client.mandates),
         joinedload(models.Client.portfolios).joinedload(models.Portfolio.positions),
         joinedload(models.Client.portfolios).joinedload(models.Portfolio.nav_history),
+        joinedload(models.Client.portfolios).joinedload(models.Portfolio.cash_balances),
         joinedload(models.Client.cash_flows),
     )
 
 
 def _build_client_out(client: models.Client, rates: dict, ccy: str) -> schemas.ClientOut:
-    agg = pnl.client_aggregate(client, rates, ccy, AS_OF)
+    agg = pnl.client_aggregate(client, rates, ccy, today())
     out = schemas.ClientOut.model_validate(client)
     out.total_deposits = agg["total_deposits"]
     out.total_withdrawals = agg["total_withdrawals"]
@@ -31,13 +32,16 @@ def _build_client_out(client: models.Client, rates: dict, ccy: str) -> schemas.C
     out.current_nav = agg["current_nav"]
     out.pnl_ytd = agg["pnl_ytd"]
     out.pnl_since_inception = agg["pnl_since_inception"]
+    out.twr_ytd = agg["twr_ytd"]
+    out.twr_since_inception = agg["twr_since_inception"]
 
     portfolios_out = []
     for p in client.portfolios:
         p_out = schemas.PortfolioOut.model_validate(p)
         p_out.market_value = pnl.portfolio_market_value(p, rates, ccy)
+        p_out.cash_total = pnl.portfolio_cash(p, rates, ccy)
         p_out.unrealized_pnl = pnl.portfolio_unrealized_pnl(p, rates, ccy)
-        p_out.realized_pnl_ytd = pnl.portfolio_pnl_ytd(p, rates, ccy, AS_OF)
+        p_out.realized_pnl_ytd = pnl.portfolio_pnl_ytd(p, rates, ccy, today())
         p_out.realized_pnl_since_inception = pnl.portfolio_pnl_since_inception(p, rates, ccy)
         positions_out = []
         for pos in p.positions:
@@ -60,7 +64,7 @@ def list_clients(
     clients = _client_query(db).order_by(models.Client.entry_date).all()
     out = []
     for c in clients:
-        agg = pnl.client_aggregate(c, rates, ccy, AS_OF)
+        agg = pnl.client_aggregate(c, rates, ccy, today())
         summary = schemas.ClientSummaryOut.model_validate(c)
         summary.net_deposits = agg["net_deposits"]
         summary.current_nav = agg["current_nav"]

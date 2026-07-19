@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app import models, schemas
 from app.database import get_db
-from app.utils import AS_OF
+from app.utils import today
 
 router = APIRouter(prefix="/api/compliance", tags=["compliance"])
 
@@ -16,7 +16,7 @@ EXPIRING_SOON_WINDOW_DAYS = 60
 def _status(expiry: dt.date | None) -> tuple[str, int | None]:
     if expiry is None:
         return "missing", None
-    days = (expiry - AS_OF).days
+    days = (expiry - today()).days
     if days < 0:
         return "expired", days
     if days <= EXPIRING_SOON_WINDOW_DAYS:
@@ -56,8 +56,8 @@ def renew_document(document_id: int, body: DocumentRenewal, db: Session = Depend
     doc = db.query(models.ComplianceDocument).filter(models.ComplianceDocument.id == document_id).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
-    doc.issued_date = AS_OF
-    doc.expiry_date = AS_OF + dt.timedelta(days=body.validity_days)
+    doc.issued_date = today()
+    doc.expiry_date = today() + dt.timedelta(days=body.validity_days)
     db.commit()
     db.refresh(doc)
     computed_status, days = _status(doc.expiry_date)
@@ -88,7 +88,7 @@ def compliance_summary(db: Session = Depends(get_db)):
             client_id=m.client_id,
             client_name=m.client.name,
             renewal_date=m.renewal_date,
-            days_to_renewal=(m.renewal_date - AS_OF).days,
+            days_to_renewal=(m.renewal_date - today()).days,
             notice_period_days=m.notice_period_days,
         )
         for m in mandates
@@ -97,7 +97,7 @@ def compliance_summary(db: Session = Depends(get_db)):
     upcoming = [r for r in renewals if r.days_to_renewal <= 180]
 
     return schemas.ComplianceSummaryOut(
-        as_of=AS_OF,
+        as_of=today(),
         valid=counts["valid"],
         expiring_soon=counts["expiring_soon"],
         expired=counts["expired"],

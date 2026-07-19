@@ -13,15 +13,23 @@ router = APIRouter(prefix="/api/market", tags=["market"])
 # ---------------- Watchlist ----------------
 class WatchlistItemIn(BaseModel):
     ticker: str
-    name: str
+    data_symbol: str | None = None
+    name: str = ""
     asset_class: str = "equity"
     currency: str = "USD"
-    last_price: float
+    last_price: float = 0.0
     day_change_pct: float = 0.0
     target_price: float | None = None
     added_by_id: int | None = None
     notes: str = ""
     tags: str = ""
+
+
+class WatchlistItemUpdate(BaseModel):
+    data_symbol: str | None = None
+    target_price: float | None = None
+    notes: str | None = None
+    tags: str | None = None
 
 
 @router.get("/watchlist", response_model=list[schemas.WatchlistItemOut])
@@ -36,8 +44,32 @@ def list_watchlist(db: Session = Depends(get_db)):
 
 @router.post("/watchlist", response_model=schemas.WatchlistItemOut)
 def add_watchlist_item(body: WatchlistItemIn, db: Session = Depends(get_db)):
+    from app.services.market_data import fetch_yahoo_quote
+
     item = models.WatchlistItem(**body.model_dump())
+    # Fetch an initial quote right away so the row doesn't start at 0
+    quote = fetch_yahoo_quote(item.data_symbol or item.ticker)
+    if quote:
+        item.last_price, item.day_change_pct = quote
     db.add(item)
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+@router.patch("/watchlist/{item_id}", response_model=schemas.WatchlistItemOut)
+def update_watchlist_item(item_id: int, body: WatchlistItemUpdate, db: Session = Depends(get_db)):
+    from app.services.market_data import fetch_yahoo_quote
+
+    item = db.query(models.WatchlistItem).filter(models.WatchlistItem.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(item, field, value)
+    if "data_symbol" in body.model_dump(exclude_unset=True):
+        quote = fetch_yahoo_quote(item.data_symbol or item.ticker)
+        if quote:
+            item.last_price, item.day_change_pct = quote
     db.commit()
     db.refresh(item)
     return item

@@ -24,6 +24,9 @@ import type {
   Position,
   PositionInput,
   ReferenceEntry,
+  SyncLog,
+  SyncStatus,
+  Trade,
   Transaction,
   TokenResponse,
   User,
@@ -167,6 +170,8 @@ export const api = {
     request<WatchlistItem>(`/api/market/watchlist`, { method: "POST", body: JSON.stringify(payload) }),
   removeWatchlistItem: (id: number) =>
     request<{ ok: boolean }>(`/api/market/watchlist/${id}`, { method: "DELETE" }),
+  updateWatchlistItem: (id: number, payload: { data_symbol?: string | null; target_price?: number | null; notes?: string; tags?: string }) =>
+    request<WatchlistItem>(`/api/market/watchlist/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
 
   news: () => request<NewsItem[]>(`/api/market/news`),
 
@@ -193,6 +198,12 @@ export const api = {
 
   fxRates: () => request<FXRate[]>(`/api/fx/rates`),
   fxCurrencies: () => request<string[]>(`/api/fx/currencies`),
+
+  portfolioTrades: (portfolioId: number) => request<Trade[]>(`/api/portfolios/${portfolioId}/trades`),
+
+  syncStatus: () => request<SyncStatus>(`/api/sync/status`),
+  triggerIbkrSync: () => request<SyncLog>(`/api/sync/ibkr`, { method: "POST" }),
+  triggerMarketRefresh: () => request<SyncLog>(`/api/sync/market-data`, { method: "POST" }),
 
   aumTargets: (ccy: string) => request<AumTarget[]>(`/api/financier/aum-targets?ccy=${ccy}`),
   createAumTarget: (payload: AumTargetInput, ccy = "EUR") =>

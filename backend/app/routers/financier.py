@@ -9,7 +9,7 @@ from app.database import get_db
 from app.deps import fx_rates, target_currency
 from app.services import fee_engine, pnl
 from app.services.fx import convert
-from app.utils import AS_OF
+from app.utils import today
 
 router = APIRouter(prefix="/api/financier", tags=["financier"])
 
@@ -68,12 +68,12 @@ def financier_summary(
     overdue = sum(
         convert(t.amount, t.currency, ccy, rates)
         for t in txns
-        if t.status in ("invoiced", "pending") and t.due_date and t.due_date < AS_OF
+        if t.status in ("invoiced", "pending") and t.due_date and t.due_date < today()
     )
     paid_ytd = sum(
         convert(t.amount, t.currency, ccy, rates)
         for t in txns
-        if t.status == "paid" and t.paid_date and t.paid_date.year == AS_OF.year
+        if t.status == "paid" and t.paid_date and t.paid_date.year == today().year
     )
     return {"currency": ccy, "pending": pending, "overdue": overdue, "paid_ytd": paid_ytd}
 
@@ -99,7 +99,7 @@ def fee_engine_preview(
     out = []
     for m in mandates:
         client_txns = [t for t in all_txns if t.client_id == m.client_id]
-        calc = fee_engine.preview(m.client, m, client_txns, rates, ccy, AS_OF)
+        calc = fee_engine.preview(m.client, m, client_txns, rates, ccy, today())
         out.append(
             schemas.FeeEnginePreviewOut(
                 mandate_id=m.id,
@@ -128,7 +128,7 @@ def generate_management_fee(mandate_id: int, db: Session = Depends(get_db), rate
     if not mandate:
         raise HTTPException(status_code=404, detail="Mandate not found")
     client_txns = db.query(models.Transaction).filter(models.Transaction.client_id == mandate.client_id).all()
-    calc = fee_engine.preview(mandate.client, mandate, client_txns, rates, mandate.client.base_currency, AS_OF)
+    calc = fee_engine.preview(mandate.client, mandate, client_txns, rates, mandate.client.base_currency, today())
     if not calc["mgmt_fee_invoiceable"]:
         raise HTTPException(status_code=400, detail="Aucun frais de gestion à facturer sur la période")
 
@@ -138,9 +138,9 @@ def generate_management_fee(mandate_id: int, db: Session = Depends(get_db), rate
         amount=round(calc["mgmt_fee_base_ccy"], 2),
         currency=mandate.client.base_currency,
         status="draft",
-        issue_date=AS_OF,
-        due_date=AS_OF + dt.timedelta(days=30),
-        invoice_ref=f"INV-MGMT-{mandate.client_id:04d}-{AS_OF.strftime('%Y%m%d')}",
+        issue_date=today(),
+        due_date=today() + dt.timedelta(days=30),
+        invoice_ref=f"INV-MGMT-{mandate.client_id:04d}-{today().strftime('%Y%m%d')}",
         description=f"Frais de gestion — période du {calc['period_start']} au {calc['period_end']} (généré par le fee engine)",
     )
     db.add(txn)
@@ -157,7 +157,7 @@ def crystallize_performance_fee(mandate_id: int, db: Session = Depends(get_db), 
     if not mandate:
         raise HTTPException(status_code=404, detail="Mandate not found")
     client_txns = db.query(models.Transaction).filter(models.Transaction.client_id == mandate.client_id).all()
-    calc = fee_engine.preview(mandate.client, mandate, client_txns, rates, mandate.client.base_currency, AS_OF)
+    calc = fee_engine.preview(mandate.client, mandate, client_txns, rates, mandate.client.base_currency, today())
     if not calc["perf_fee_crystallizable"]:
         raise HTTPException(status_code=400, detail="Aucune performance fee à cristalliser (NAV sous le HWM/hurdle)")
 
@@ -167,10 +167,10 @@ def crystallize_performance_fee(mandate_id: int, db: Session = Depends(get_db), 
         amount=round(calc["perf_fee_base_ccy"], 2),
         currency=mandate.client.base_currency,
         status="draft",
-        issue_date=AS_OF,
-        due_date=AS_OF + dt.timedelta(days=30),
-        invoice_ref=f"INV-PERF-{mandate.client_id:04d}-{AS_OF.strftime('%Y%m%d')}",
-        description=f"Performance fee cristallisée au {AS_OF} (nouveau HWM: {calc['nav_end_base_ccy']:.2f} {mandate.client.base_currency})",
+        issue_date=today(),
+        due_date=today() + dt.timedelta(days=30),
+        invoice_ref=f"INV-PERF-{mandate.client_id:04d}-{today().strftime('%Y%m%d')}",
+        description=f"Performance fee cristallisée au {today()} (nouveau HWM: {calc['nav_end_base_ccy']:.2f} {mandate.client.base_currency})",
     )
     db.add(txn)
     mandate.high_water_mark = calc["nav_end_base_ccy"]

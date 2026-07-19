@@ -10,6 +10,11 @@ services:
       # Change this to a long random string before exposing the platform
       # beyond your own machine — it signs the login sessions.
       - AUTH_SECRET_KEY=boulet-capital-dev-secret-change-me
+      # Connexion Interactive Brokers (Flex Web Service) — voir la page
+      # "Données & Synchro" de la plateforme pour le guide pas-à-pas.
+      # Ces valeurs restent sur TA machine, ne les partage jamais.
+      # - IBKR_FLEX_TOKEN=
+      # - IBKR_FLEX_QUERY_ID=
       # - SEED_DEMO_DATA=true
 
   frontend:

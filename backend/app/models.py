@@ -95,6 +95,7 @@ class Portfolio(Base):
     client: Mapped["Client"] = relationship(back_populates="portfolios")
     positions: Mapped[list["Position"]] = relationship(back_populates="portfolio")
     nav_history: Mapped[list["NavHistory"]] = relationship(back_populates="portfolio")
+    cash_balances: Mapped[list["CashBalance"]] = relationship(back_populates="portfolio")
 
 
 class Position(Base):
@@ -186,6 +187,9 @@ class WatchlistItem(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     ticker: Mapped[str] = mapped_column(String(20))
+    # Yahoo Finance symbol when it differs from the display ticker
+    # (foreign listings: "0700" -> "0700.HK", "MC" -> "MC.PA", "NESN" -> "NESN.SW")
+    data_symbol: Mapped[str | None] = mapped_column(String(30), nullable=True)
     name: Mapped[str] = mapped_column(String(160))
     asset_class: Mapped[str] = mapped_column(String(30), default="equity")
     currency: Mapped[str] = mapped_column(String(3), default="USD")
@@ -271,6 +275,56 @@ class FXRate(Base):
     ccy: Mapped[str] = mapped_column(String(3), unique=True)
     rate_vs_usd: Mapped[float] = mapped_column(Float)
     updated_at: Mapped[dt.datetime] = mapped_column(DateTime, default=dt.datetime.utcnow)
+
+
+class Trade(Base):
+    """One executed buy/sell — the blotter. Fed by the IBKR sync (deduplicated
+    by IBKR execution id) or entered manually."""
+
+    __tablename__ = "trades"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    portfolio_id: Mapped[int] = mapped_column(ForeignKey("portfolios.id"))
+    trade_date: Mapped[dt.date] = mapped_column(Date)
+    side: Mapped[str] = mapped_column(String(4))  # BUY / SELL
+    ticker: Mapped[str] = mapped_column(String(20))
+    name: Mapped[str] = mapped_column(String(160), default="")
+    asset_class: Mapped[str] = mapped_column(String(30), default="equity")
+    currency: Mapped[str] = mapped_column(String(3), default="USD")
+    quantity: Mapped[float] = mapped_column(Float)
+    price: Mapped[float] = mapped_column(Float)
+    commission: Mapped[float] = mapped_column(Float, default=0.0)
+    realized_pnl: Mapped[float] = mapped_column(Float, default=0.0)
+    source: Mapped[str] = mapped_column(String(20), default="manual")  # manual / ibkr
+    ibkr_exec_id: Mapped[str | None] = mapped_column(String(60), nullable=True, unique=True)
+
+    portfolio: Mapped["Portfolio"] = relationship()
+
+
+class CashBalance(Base):
+    """Cash held in a portfolio, one row per currency. Fed by the IBKR sync."""
+
+    __tablename__ = "cash_balances"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    portfolio_id: Mapped[int] = mapped_column(ForeignKey("portfolios.id"))
+    currency: Mapped[str] = mapped_column(String(3))
+    amount: Mapped[float] = mapped_column(Float, default=0.0)
+
+    portfolio: Mapped["Portfolio"] = relationship(back_populates="cash_balances")
+
+
+class SyncLog(Base):
+    """History of IBKR / market-data sync runs, for the Données & Synchro page."""
+
+    __tablename__ = "sync_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[str] = mapped_column(String(20))  # ibkr / market_data
+    started_at: Mapped[dt.datetime] = mapped_column(DateTime)
+    finished_at: Mapped[dt.datetime | None] = mapped_column(DateTime, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="running")  # running / success / error
+    message: Mapped[str] = mapped_column(Text, default="")
 
 
 class AumTarget(Base):

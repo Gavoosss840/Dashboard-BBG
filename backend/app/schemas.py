@@ -95,6 +95,27 @@ class NavPointOut(ORMBase):
     nav: float
 
 
+class CashBalanceOut(ORMBase):
+    currency: str
+    amount: float
+
+
+class TradeOut(ORMBase):
+    id: int
+    portfolio_id: int
+    trade_date: dt.date
+    side: str
+    ticker: str
+    name: str
+    asset_class: str
+    currency: str
+    quantity: float
+    price: float
+    commission: float
+    realized_pnl: float
+    source: str
+
+
 class PortfolioOut(ORMBase):
     id: int
     ptf_id: str
@@ -105,7 +126,9 @@ class PortfolioOut(ORMBase):
     inception_nav: float
     positions: list[PositionOut] = []
     nav_history: list[NavPointOut] = []
+    cash_balances: list[CashBalanceOut] = []
     market_value: float = 0.0
+    cash_total: float = 0.0
     unrealized_pnl: float = 0.0
     realized_pnl_ytd: float = 0.0
     realized_pnl_since_inception: float = 0.0
@@ -132,6 +155,8 @@ class ClientOut(ORMBase):
     current_nav: float = 0.0
     pnl_ytd: float = 0.0
     pnl_since_inception: float = 0.0
+    twr_ytd: float | None = None
+    twr_since_inception: float | None = None
     mandates: list[MandateOut] = []
     portfolios: list[PortfolioOut] = []
 
@@ -377,6 +402,7 @@ class CrmContactOut(ORMBase):
 class WatchlistItemOut(ORMBase):
     id: int
     ticker: str
+    data_symbol: str | None = None
     name: str
     asset_class: str
     currency: str
@@ -386,6 +412,22 @@ class WatchlistItemOut(ORMBase):
     added_by: UserOut | None = None
     notes: str
     tags: str
+
+
+# ---------- Sync (IBKR / market data) ----------
+class SyncLogOut(ORMBase):
+    id: int
+    kind: str
+    started_at: dt.datetime
+    finished_at: dt.datetime | None
+    status: str
+    message: str
+
+
+class SyncStatusOut(BaseModel):
+    ibkr_configured: bool
+    last_ibkr_sync: SyncLogOut | None = None
+    last_market_refresh: SyncLogOut | None = None
 
 
 class NewsItemOut(ORMBase):

@@ -18,7 +18,7 @@ import { MandateForm } from "../components/forms/MandateForm";
 import { PortfolioForm } from "../components/forms/PortfolioForm";
 import { PositionForm } from "../components/forms/PositionForm";
 import { CashFlowForm } from "../components/forms/CashFlowForm";
-import { formatDate, formatMoney, formatNumber } from "../lib/format";
+import { formatDate, formatMoney, formatNumber, formatPct } from "../lib/format";
 import type {
   CashFlowInput,
   ClientInput,
@@ -184,6 +184,23 @@ export function ClientDetailPage() {
         />
       </div>
 
+      {(data.twr_ytd !== null || data.twr_since_inception !== null) && (
+        <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-4">
+          <StatTile
+            label="TWR YTD"
+            value={data.twr_ytd !== null ? formatPct(data.twr_ytd * 100) : "—"}
+            sub="Performance pondérée dans le temps"
+            tone={data.twr_ytd !== null ? (data.twr_ytd >= 0 ? "good" : "critical") : "neutral"}
+          />
+          <StatTile
+            label="TWR Since Inception"
+            value={data.twr_since_inception !== null ? formatPct(data.twr_since_inception * 100) : "—"}
+            sub="Insensible aux dépôts/retraits"
+            tone={data.twr_since_inception !== null ? (data.twr_since_inception >= 0 ? "good" : "critical") : "neutral"}
+          />
+        </div>
+      )}
+
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card title="Évolution de la NAV" className="lg:col-span-2">
           <NavChart data={combinedNav} ccy={currency} />
@@ -322,6 +339,19 @@ export function ClientDetailPage() {
             </div>
           }
         >
+          {p.cash_balances.length > 0 && (
+            <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-[var(--text-secondary)]">
+              <span className="text-[var(--text-muted)]">Cash :</span>
+              {p.cash_balances.map((cb) => (
+                <span key={cb.currency} className="rounded bg-white/5 px-1.5 py-0.5 tabular">
+                  {formatMoney(cb.amount, cb.currency)}
+                </span>
+              ))}
+              <span className="text-[var(--text-muted)]">
+                (total {formatMoney(p.cash_total, currency, { compact: true })})
+              </span>
+            </div>
+          )}
           {p.positions.length === 0 ? (
             <div className="text-sm text-[var(--text-muted)]">Aucune position.</div>
           ) : (
@@ -375,6 +405,7 @@ export function ClientDetailPage() {
               </tbody>
             </table>
           )}
+          <PortfolioTrades portfolioId={p.id} />
         </Card>
       ))}
 
@@ -424,6 +455,58 @@ export function ClientDetailPage() {
       <Modal open={modal?.type === "newCashFlow"} onClose={() => setModal(null)} title="Dépôt / Retrait">
         <CashFlowForm defaultCurrency={data.base_currency} onSubmit={handleCashFlowSubmit} onCancel={() => setModal(null)} />
       </Modal>
+    </div>
+  );
+}
+
+function PortfolioTrades({ portfolioId }: { portfolioId: number }) {
+  const { data } = useApi(() => api.portfolioTrades(portfolioId), [portfolioId]);
+  const [open, setOpen] = useState(false);
+  if (!data || data.length === 0) return null;
+  return (
+    <div className="mt-4 border-t border-white/5 pt-3">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="text-xs text-[var(--text-muted)] hover:text-[var(--series-1)]"
+      >
+        {open ? "▾" : "▸"} Blotter — {data.length} trade{data.length > 1 ? "s" : ""}
+      </button>
+      {open && (
+        <table className="mt-2 w-full text-sm">
+          <thead>
+            <tr className="text-left text-xs uppercase text-[var(--text-muted)]">
+              <th className="pb-2">Date</th>
+              <th className="pb-2">Sens</th>
+              <th className="pb-2">Ticker</th>
+              <th className="pb-2 text-right">Qté</th>
+              <th className="pb-2 text-right">Prix</th>
+              <th className="pb-2 text-right">Commission</th>
+              <th className="pb-2 text-right">P&L réalisé</th>
+              <th className="pb-2">Source</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((t) => (
+              <tr key={t.id} className="border-t border-white/5">
+                <td className="py-1.5 text-[var(--text-secondary)]">{formatDate(t.trade_date)}</td>
+                <td className="py-1.5">
+                  <span style={{ color: t.side === "BUY" ? "var(--status-good)" : "var(--status-critical)" }}>
+                    {t.side === "BUY" ? "Achat" : "Vente"}
+                  </span>
+                </td>
+                <td className="py-1.5 font-medium">{t.ticker}</td>
+                <td className="tabular py-1.5 text-right">{formatNumber(t.quantity, 2)}</td>
+                <td className="tabular py-1.5 text-right">{formatMoney(t.price, t.currency)}</td>
+                <td className="tabular py-1.5 text-right text-[var(--text-muted)]">{formatMoney(t.commission, t.currency)}</td>
+                <td className="py-1.5 text-right">
+                  <PnlValue amount={t.realized_pnl} ccy={t.currency} />
+                </td>
+                <td className="py-1.5 text-xs uppercase text-[var(--text-muted)]">{t.source}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }

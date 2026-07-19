@@ -16,9 +16,41 @@ export function MarketPage() {
   const [tab, setTab] = useState<"watchlist" | "news">("watchlist");
   const watchlist = useApi(() => api.watchlist(), []);
   const news = useApi(() => api.news(), []);
+  const [newTicker, setNewTicker] = useState("");
+  const [newDataSymbol, setNewDataSymbol] = useState("");
+  const [adding, setAdding] = useState(false);
 
   async function remove(id: number) {
     await api.removeWatchlistItem(id);
+    watchlist.reload();
+  }
+
+  async function addTicker() {
+    const ticker = newTicker.trim().toUpperCase();
+    if (!ticker) return;
+    setAdding(true);
+    try {
+      await api.addWatchlistItem({
+        ticker,
+        data_symbol: newDataSymbol.trim() || null,
+        name: ticker,
+        last_price: 0,
+      } as never);
+      setNewTicker("");
+      setNewDataSymbol("");
+      watchlist.reload();
+    } finally {
+      setAdding(false);
+    }
+  }
+
+  async function editDataSymbol(id: number, current: string | null) {
+    const value = window.prompt(
+      "Symbole Yahoo Finance pour cette valeur (ex: 0700.HK, MC.PA, NESN.SW). Vide = utiliser le ticker tel quel.",
+      current ?? ""
+    );
+    if (value === null) return;
+    await api.updateWatchlistItem(id, { data_symbol: value.trim() || null });
     watchlist.reload();
   }
 
@@ -45,7 +77,32 @@ export function MarketPage() {
       />
 
       {tab === "watchlist" && (
-        <Card>
+        <Card
+          action={
+            <div className="flex gap-2">
+              <input
+                value={newTicker}
+                onChange={(e) => setNewTicker(e.target.value)}
+                placeholder="Ticker (ex: AAPL)"
+                className="w-32 rounded border border-white/10 bg-[var(--surface-2)] px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--series-1)]"
+              />
+              <input
+                value={newDataSymbol}
+                onChange={(e) => setNewDataSymbol(e.target.value)}
+                placeholder="Symbole data (opt.)"
+                className="w-36 rounded border border-white/10 bg-[var(--surface-2)] px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--series-1)]"
+              />
+              <button
+                onClick={addTicker}
+                disabled={adding}
+                className="rounded bg-[var(--series-1)] px-3 py-1 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+              >
+                {adding ? "…" : "+ Ajouter"}
+              </button>
+            </div>
+          }
+          title="Watchlist"
+        >
           {watchlist.loading && <LoadingState />}
           {watchlist.error && <ErrorState message={watchlist.error} />}
           {watchlist.data && (
@@ -57,6 +114,7 @@ export function MarketPage() {
                   <th className="pb-2">Classe</th>
                   <th className="pb-2 text-right">Dernier prix</th>
                   <th className="pb-2 text-right">Variation jour</th>
+                  <th className="pb-2">Symbole data</th>
                   <th className="pb-2">Ajouté par</th>
                   <th className="pb-2"></th>
                 </tr>
@@ -73,6 +131,14 @@ export function MarketPage() {
                       style={{ color: w.day_change_pct >= 0 ? "var(--status-good)" : "var(--status-critical)" }}
                     >
                       {formatPct(w.day_change_pct)}
+                    </td>
+                    <td className="py-2">
+                      <button
+                        onClick={() => editDataSymbol(w.id, w.data_symbol)}
+                        className="text-xs text-[var(--text-muted)] hover:text-[var(--series-1)]"
+                      >
+                        {w.data_symbol ?? "définir"}
+                      </button>
                     </td>
                     <td className="py-2 text-[var(--text-muted)]">{w.added_by?.name ?? "—"}</td>
                     <td className="py-2 text-right">

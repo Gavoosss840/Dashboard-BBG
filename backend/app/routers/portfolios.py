@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session, joinedload
 from app import models, schemas
 from app.database import get_db
 from app.deps import fx_rates, target_currency
-from app.utils import AS_OF
+from app.utils import today
 from app.services import pnl
 
 router = APIRouter(prefix="/api/portfolios", tags=["portfolios"])
@@ -63,7 +63,7 @@ def global_portfolio(
     ]
 
     return schemas.GlobalPortfolioOut(
-        as_of=AS_OF,
+        as_of=today(),
         currency=ccy,
         total_market_value=total_mv,
         total_unrealized_pnl=total_pnl,
@@ -96,7 +96,7 @@ def get_portfolio(
     out = schemas.PortfolioOut.model_validate(portfolio)
     out.market_value = pnl.portfolio_market_value(portfolio, rates, ccy)
     out.unrealized_pnl = pnl.portfolio_unrealized_pnl(portfolio, rates, ccy)
-    out.realized_pnl_ytd = pnl.portfolio_pnl_ytd(portfolio, rates, ccy, AS_OF)
+    out.realized_pnl_ytd = pnl.portfolio_pnl_ytd(portfolio, rates, ccy, today())
     out.realized_pnl_since_inception = pnl.portfolio_pnl_since_inception(portfolio, rates, ccy)
     positions_out = []
     for pos in portfolio.positions:
@@ -179,3 +179,14 @@ def delete_position(position_id: int, db: Session = Depends(get_db)):
     db.delete(position)
     db.commit()
     return {"ok": True}
+
+
+@router.get("/{portfolio_id}/trades", response_model=list[schemas.TradeOut])
+def list_trades(portfolio_id: int, db: Session = Depends(get_db)):
+    return (
+        db.query(models.Trade)
+        .filter(models.Trade.portfolio_id == portfolio_id)
+        .order_by(models.Trade.trade_date.desc(), models.Trade.id.desc())
+        .limit(200)
+        .all()
+    )

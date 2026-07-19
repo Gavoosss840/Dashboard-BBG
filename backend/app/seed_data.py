@@ -22,9 +22,12 @@ import random
 from sqlalchemy.orm import Session
 
 from app import models
-from app.utils import AS_OF, business_days_between
+from app.utils import business_days_between, today
 
 random.seed(42)
+
+# Demo data is generated relative to the day the seed runs.
+AS_OF = today()
 
 DEMO_MODE = os.environ.get("SEED_DEMO_DATA", "false").strip().lower() in ("1", "true", "yes")
 

@@ -14,6 +14,7 @@ import { EarningsPage } from "./pages/EarningsPage";
 import { ReferencePage } from "./pages/ReferencePage";
 import { UsersPage } from "./pages/UsersPage";
 import { AllocationPage } from "./pages/AllocationPage";
+import { DataSyncPage } from "./pages/DataSyncPage";
 import { useAuth } from "./context/AuthContext";
 import { LoadingState } from "./components/ui/States";
 
@@ -48,6 +49,7 @@ function App() {
         <Route path="/reference" element={<ReferencePage />} />
         <Route path="/users" element={<UsersPage />} />
         <Route path="/allocation" element={<AllocationPage />} />
+        <Route path="/data" element={<DataSyncPage />} />
       </Routes>
     </Layout>
   );

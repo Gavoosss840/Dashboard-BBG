@@ -97,6 +97,27 @@ export interface NavPoint {
   nav: number;
 }
 
+export interface CashBalance {
+  currency: string;
+  amount: number;
+}
+
+export interface Trade {
+  id: number;
+  portfolio_id: number;
+  trade_date: string;
+  side: string;
+  ticker: string;
+  name: string;
+  asset_class: string;
+  currency: string;
+  quantity: number;
+  price: number;
+  commission: number;
+  realized_pnl: number;
+  source: string;
+}
+
 export interface Portfolio {
   id: number;
   ptf_id: string;
@@ -107,7 +128,9 @@ export interface Portfolio {
   inception_nav: number;
   positions: Position[];
   nav_history: NavPoint[];
+  cash_balances: CashBalance[];
   market_value: number;
+  cash_total: number;
   unrealized_pnl: number;
   realized_pnl_ytd: number;
   realized_pnl_since_inception: number;
@@ -136,6 +159,8 @@ export interface Client extends ClientSummary {
   notes: string;
   total_deposits: number;
   total_withdrawals: number;
+  twr_ytd: number | null;
+  twr_since_inception: number | null;
   mandates: Mandate[];
   portfolios: Portfolio[];
 }
@@ -287,6 +312,7 @@ export interface CrmContact {
 export interface WatchlistItem {
   id: number;
   ticker: string;
+  data_symbol: string | null;
   name: string;
   asset_class: string;
   currency: string;
@@ -394,4 +420,19 @@ export interface Dashboard {
   pending_fees: number;
   upcoming_earnings: number;
   open_crm_leads: number;
+}
+
+export interface SyncLog {
+  id: number;
+  kind: string;
+  started_at: string;
+  finished_at: string | null;
+  status: string;
+  message: string;
+}
+
+export interface SyncStatus {
+  ibkr_configured: boolean;
+  last_ibkr_sync: SyncLog | null;
+  last_market_refresh: SyncLog | null;
 }

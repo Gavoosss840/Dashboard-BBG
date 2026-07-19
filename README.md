@@ -182,17 +182,47 @@ Chaque mandat porte les 4 frais classiques de la gestion d'actifs / hedge fund :
 - **Performance fee** (`perf_fee_pct`, avec High-Water Mark et hurdle
   optionnel) : cristallisée via le fee engine.
 
-## Intégration Interactive Brokers (à venir)
+## Intégration Interactive Brokers (Flex Web Service)
 
-Toutes les données sont actuellement mockées (`backend/app/seed_data.py`,
-seed déterministe, ancré au 15/07/2026) pour permettre de développer et
-tester chaque module sans dépendre de l'accès IBKR. Le point d'entrée prévu
-pour la connexion réelle est `backend/app/services/ibkr.py` — voir les
-commentaires du fichier pour le mapping exact (positions, NAV, P&L réalisé)
-vers les modèles existants (`Position`, `NavHistory`). Une fois le connecteur
-IBKR autorisé, aucune modification de l'API ni du frontend n'est nécessaire :
-il suffit d'implémenter `IBKRClient` et un job planifié qui synchronise les
-tables au lieu du seed aléatoire.
+La plateforme se synchronise sur les **relevés officiels IBKR** via le Flex
+Web Service (`backend/app/services/ibkr.py`) — sans logiciel Gateway à faire
+tourner. Chaque synchro importe, par compte IBKR (le `accountId` U1234567
+doit correspondre à l'« ID Portefeuille » d'un portefeuille de la plateforme) :
+
+- **Positions** avec les marks officiels du custodian (remplacées à chaque synchro)
+- **Trades** dans le blotter, dédupliqués par identifiant d'exécution IBKR
+- **Dépôts/retraits** → flux de trésorerie du client (les dividendes/intérêts
+  sont exclus des flux : c'est de la performance, pas des apports)
+- **NAV officielle** par jour → historique de NAV (base du calcul TWR)
+- **Cash par devise** → soldes de trésorerie du portefeuille
+
+Configuration : suivre le guide pas-à-pas de la page **Données & Synchro**
+de la plateforme, puis renseigner `IBKR_FLEX_TOKEN` et `IBKR_FLEX_QUERY_ID`
+dans `docker-compose.yml`. Le token ne quitte jamais ta machine. La synchro
+tourne automatiquement au démarrage (si la dernière date de plus de 12h) et
+à la demande depuis la page. Pour la **première** synchro, configurer la
+Flex Query sur *Last 365 Calendar Days* pour rattraper l'historique de
+l'année, puis repasser sur *Last Business Day*.
+
+## Données de marché (gratuit)
+
+- **Prix** : Yahoo Finance (fin de journée) pour la watchlist et pour
+  rafraîchir les positions entre deux synchros IBKR. Pour les places
+  étrangères, renseigner le « symbole data » (ex : `0700.HK`, `MC.PA`,
+  `NESN.SW`) dans la watchlist.
+- **Taux de change** : open.er-api.com (taux réels, AED inclus), rafraîchis
+  au démarrage et à la demande.
+- La couche est abstraite dans `backend/app/services/market_data.py` pour
+  basculer vers un fournisseur payant (EODHD, Polygon…) plus tard sans rien
+  changer d'autre.
+
+## Performance : NAV vivante et TWR
+
+La NAV courante d'un portefeuille = cash + valeur de marché des positions
+(les marks IBKR font foi). Le P&L client est **ajusté des flux** (un dépôt
+n'est pas un gain), et le **TWR** (time-weighted return) est calculé en
+chaînant les NAV officielles quotidiennes avec les flux — c'est la mesure de
+performance présentable à un client ou un régulateur.
 
 ## Pistes d'amélioration restantes
 

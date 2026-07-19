@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app import models, schemas
 from app.database import get_db
 from app.deps import fx_rates, target_currency
-from app.utils import AS_OF
+from app.utils import today
 from app.services import pnl, risk_parity
 
 router = APIRouter(prefix="/api/allocation", tags=["allocation"])
@@ -40,7 +40,7 @@ def get_allocation(
     returns_by_bucket = []
     vols = []
     for b in buckets:
-        cutoff = AS_OF - dt.timedelta(days=b.lookback_days)
+        cutoff = today() - dt.timedelta(days=b.lookback_days)
         rows = (
             db.query(models.AllocationReturn)
             .filter(models.AllocationReturn.bucket_id == b.id, models.AllocationReturn.date >= cutoff)
@@ -79,5 +79,5 @@ def get_allocation(
         buckets=bucket_outs,
         total_aum=total_aum,
         method="Risk Parity pur (Equal Risk Contribution, vol réalisée 60j)",
-        as_of=AS_OF,
+        as_of=today(),
     )
