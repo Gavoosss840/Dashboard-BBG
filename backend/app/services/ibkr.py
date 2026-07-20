@@ -191,6 +191,15 @@ def import_flex(xml_text: str, db: Session) -> dict:
         # ---- Open positions: replace wholesale with the custodian's view ----
         open_positions = list(stmt.iter("OpenPosition"))
         if open_positions:
+            # flush first: the session has autoflush=False, and a multi-day Flex
+            # Query period returns one <FlexStatement> per day, each with its own
+            # OpenPositions snapshot. Without an explicit flush, a still-pending
+            # (unflushed) insert from an EARLIER statement in this same loop is
+            # invisible to this bulk delete — it isn't in the table yet, so it
+            # can't be removed — and both days' snapshots end up committed
+            # together, duplicating every position that appears in more than
+            # one day's statement.
+            db.flush()
             db.query(models.Position).filter(models.Position.portfolio_id == portfolio.id).delete(
                 synchronize_session=False
             )
@@ -199,7 +208,16 @@ def import_flex(xml_text: str, db: Session) -> dict:
                 if qty == 0:
                     continue
                 mark = _num(op, "markPrice")
-                cost = _num(op, "costBasisPrice", "openPrice") or mark
+                # Per-share cost basis first; some Flex Query configurations only
+                # expose the total position cost ("costBasis") rather than a
+                # per-share figure, in which case costBasisPrice/openPrice come
+                # back empty and every position silently shows 0 unrealized P&L
+                # (avg_cost falls back to markPrice). Derive per-share from the
+                # total before giving up and accepting that fallback.
+                cost = _num(op, "costBasisPrice", "openPrice")
+                if not cost:
+                    total_cost = _num(op, "costBasis")
+                    cost = abs(total_cost / qty) if total_cost and qty else mark
                 # Options/futures settle on quantity * price * multiplier (e.g. 100
                 # for a standard equity option) — IBKR always reports it, including
                 # "1" for stocks/ETFs. Falling back to 1 covers older exports that
@@ -312,6 +330,10 @@ def import_flex(xml_text: str, db: Session) -> dict:
             cash_by_currency[_attr(cr, "currency").upper()] = cr
         cash_rows = list(cash_by_currency.values())
         if cash_rows:
+            # Same multi-day-statement/autoflush hazard as the positions block
+            # above — flush pending inserts from an earlier statement before
+            # this bulk delete, or they survive alongside today's balances.
+            db.flush()
             db.query(models.CashBalance).filter(models.CashBalance.portfolio_id == portfolio.id).delete(
                 synchronize_session=False
             )
