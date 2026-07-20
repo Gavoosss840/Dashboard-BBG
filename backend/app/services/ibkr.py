@@ -45,11 +45,15 @@ def flex_connections() -> list[tuple[str, str, str]]:
     """All configured IBKR Flex connections as (label, token, query_id).
 
     Two clients on two separate IBKR logins need two tokens, so we read:
-      - the legacy pair IBKR_FLEX_TOKEN / IBKR_FLEX_QUERY_ID, and
-      - numbered pairs IBKR_FLEX_TOKEN_1..N / IBKR_FLEX_QUERY_ID_1..N.
-    Tokens live only in the environment (docker-compose.yml on the user's
-    machine) — never in the database, so they never reach a backup.
+      - the legacy pair IBKR_FLEX_TOKEN / IBKR_FLEX_QUERY_ID (docker-compose.yml),
+      - numbered pairs IBKR_FLEX_TOKEN_1..N / IBKR_FLEX_QUERY_ID_1..N, and
+      - connections entered through the platform UI (Données & Synchro),
+        stored in a local file next to the database (see ibkr_credentials.py).
+    Either way, tokens live only on the user's machine — never in the
+    database, so they never reach a backup.
     """
+    from app.services import ibkr_credentials  # local import: avoid a hard dependency at module load
+
     conns: list[tuple[str, str, str]] = []
     token, query_id = flex_config()
     if token and query_id:
@@ -60,6 +64,8 @@ def flex_connections() -> list[tuple[str, str, str]]:
         q = os.environ.get(f"IBKR_FLEX_QUERY_ID_{i}")
         if t and q:
             conns.append((f"connexion {i}", t, q))
+    for row in ibkr_credentials.list_connections():
+        conns.append((row["label"], row["token"], row["query_id"]))
     return conns
 
 

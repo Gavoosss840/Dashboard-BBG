@@ -350,13 +350,31 @@ prochaine synchro (auto ou manuelle) importe positions, NAV, dépôts/retraits
 et cash pour ce compte, sans autre configuration par client.
 
 **Plusieurs logins IBKR** (ex : un login séparé par client) : ajouter une
-paire `IBKR_FLEX_TOKEN_N` / `IBKR_FLEX_QUERY_ID_N` par login (voir le guide
-sur la page Données & Synchro). Une seule paire suffit si tous les comptes
-sont visibles sous un seul login (compte advisor/master).
+connexion par login. Une seule connexion suffit si tous les comptes sont
+visibles sous un seul login (compte advisor/master).
 
-Configuration : suivre le guide pas-à-pas de la page **Données & Synchro**
-de la plateforme, puis renseigner `IBKR_FLEX_TOKEN` et `IBKR_FLEX_QUERY_ID`
-dans `docker-compose.yml`. Le token ne quitte jamais ta machine. La synchro
+Configuration : la Flex Query et le token se créent toujours manuellement
+dans le portail IBKR (aucun système tiers n'a d'accès direct à cette étape,
+IBKR ne propose pas de connexion en un clic pour ce type d'accès) — le guide
+pas-à-pas complet est sur la page **Données & Synchro**. Une fois le token en
+main, deux façons de le renseigner :
+
+- **Directement dans la plateforme** (recommandé) : carte **« Connexions
+  IBKR »** sur la page Données & Synchro — colle le token et le Query ID,
+  donne un libellé, clique *Ajouter la connexion*. Actif immédiatement, sans
+  éditer de fichier ni redémarrer. Le bouton **Tester** vérifie tout de suite
+  que la connexion fonctionne (appel réel à IBKR) et affiche les comptes
+  couverts. Stocké dans `backend/ibkr_connections.json` — **un fichier séparé
+  de la base de données**, chmod 600, jamais inclus dans les sauvegardes
+  automatiques (donc jamais synchronisé vers OneDrive/Drive avec elles),
+  jamais dans git (`.gitignore`). Le token n'est jamais renvoyé en clair par
+  l'API après enregistrement — seuls les 4 derniers caractères sont affichés.
+- **Via `docker-compose.yml`** (méthode historique, toujours supportée) :
+  `IBKR_FLEX_TOKEN` / `IBKR_FLEX_QUERY_ID` (ou `_1`, `_2`… pour plusieurs
+  connexions). Nécessite d'éditer le fichier et de redémarrer la plateforme
+  à chaque changement.
+
+Le token ne quitte jamais ta machine, quelle que soit la méthode. La synchro
 tourne automatiquement au démarrage (si la dernière date de plus de 12h) et
 à la demande depuis la page. Pour la **première** synchro, configurer la
 Flex Query sur *Last 365 Calendar Days* pour rattraper l'historique de

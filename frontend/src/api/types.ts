@@ -465,6 +465,19 @@ export interface SyncStatus {
   last_earnings_sync: SyncLog | null;
 }
 
+export interface IbkrConnection {
+  id: string;
+  label: string;
+  query_id: string;
+  token_masked: string;
+}
+
+export interface IbkrTestResult {
+  ok: boolean;
+  accounts: string[];
+  message: string;
+}
+
 export interface AuditLog {
   id: number;
   timestamp: string;

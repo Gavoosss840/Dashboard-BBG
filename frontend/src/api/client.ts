@@ -17,6 +17,8 @@ import type {
   FeeEnginePreview,
   FXRate,
   GlobalPortfolio,
+  IbkrConnection,
+  IbkrTestResult,
   LiveNewsItem,
   Mandate,
   MarketGroup,
@@ -247,6 +249,14 @@ export const api = {
   triggerBackup: () => request<SyncLog>(`/api/sync/backup`, { method: "POST" }),
   triggerEarningsSync: () => request<SyncLog>(`/api/sync/earnings`, { method: "POST" }),
   auditLogs: (limit = 200) => request<AuditLog[]>(`/api/audit?limit=${limit}`),
+
+  ibkrConnections: () => request<IbkrConnection[]>(`/api/sync/ibkr-connections`),
+  createIbkrConnection: (payload: { label: string; token: string; query_id: string }) =>
+    request<IbkrConnection>(`/api/sync/ibkr-connections`, { method: "POST", body: JSON.stringify(payload) }),
+  deleteIbkrConnection: (id: string) =>
+    request<{ ok: boolean }>(`/api/sync/ibkr-connections/${id}`, { method: "DELETE" }),
+  testIbkrConnection: (id: string) =>
+    request<IbkrTestResult>(`/api/sync/ibkr-connections/${id}/test`, { method: "POST" }),
 
   marketsOverview: () => request<MarketGroup[]>(`/api/securities/markets`),
   liveNews: () => request<LiveNewsItem[]>(`/api/securities/news`),

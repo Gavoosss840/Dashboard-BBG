@@ -476,6 +476,25 @@ class SyncStatusOut(BaseModel):
     last_earnings_sync: SyncLogOut | None = None
 
 
+class IbkrConnectionCreate(BaseModel):
+    label: str = ""
+    token: str
+    query_id: str
+
+
+class IbkrConnectionOut(BaseModel):
+    id: str
+    label: str
+    query_id: str
+    token_masked: str
+
+
+class IbkrTestResult(BaseModel):
+    ok: bool
+    accounts: list[str]
+    message: str
+
+
 class AuditLogOut(ORMBase):
     id: int
     timestamp: dt.datetime

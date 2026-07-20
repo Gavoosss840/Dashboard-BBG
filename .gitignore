@@ -20,3 +20,4 @@ frontend/.vite/
 backups/
 backend/backups/
 backend/auth_secret.key
+backend/ibkr_connections.json
