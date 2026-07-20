@@ -17,7 +17,9 @@ import type {
   FeeEnginePreview,
   FXRate,
   GlobalPortfolio,
+  LiveNewsItem,
   Mandate,
+  MarketGroup,
   MandateInput,
   NewsItem,
   Portfolio,
@@ -221,6 +223,8 @@ export const api = {
   triggerBackup: () => request<SyncLog>(`/api/sync/backup`, { method: "POST" }),
   auditLogs: (limit = 200) => request<AuditLog[]>(`/api/audit?limit=${limit}`),
 
+  marketsOverview: () => request<MarketGroup[]>(`/api/securities/markets`),
+  liveNews: () => request<LiveNewsItem[]>(`/api/securities/news`),
   securitiesSearch: (q: string) =>
     request<SecuritySearchResult>(`/api/securities/search?q=${encodeURIComponent(q)}`),
   securitiesTape: () => request<TapeQuote[]>(`/api/securities/tape`),

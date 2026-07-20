@@ -110,12 +110,22 @@ def fetch_quotes(symbols: list[str]) -> dict[str, dict | None]:
     return dict(zip(symbols, results))
 
 
-# ---------- Chart series ----------
+# ---------- Chart series (cached: intraday moves fast, history doesn't) ----------
+
+_chart_cache: dict[tuple[str, str], tuple[float, dict]] = {}
+
+
+def _chart_ttl(range_key: str) -> int:
+    return 60 if range_key in ("1d", "5d") else 600
+
 
 def fetch_chart(symbol: str, range_key: str) -> dict | None:
     interval = RANGE_INTERVALS.get(range_key)
     if interval is None:
         return None
+    cached = _chart_cache.get((symbol, range_key))
+    if cached and time.time() - cached[0] < _chart_ttl(range_key):
+        return cached[1]
     try:
         resp = requests.get(
             CHART_URL.format(symbol=symbol),
@@ -135,13 +145,15 @@ def fetch_chart(symbol: str, range_key: str) -> dict | None:
             for t, c, v in zip(timestamps, closes, volumes + [None] * len(timestamps))
             if c is not None
         ]
-        return {
+        chart = {
             "symbol": meta.get("symbol", symbol),
             "currency": meta.get("currency", "USD"),
             "range": range_key,
             "previous_close": meta.get("chartPreviousClose") or meta.get("previousClose"),
             "points": points,
         }
+        _chart_cache[(symbol, range_key)] = (time.time(), chart)
+        return chart
     except Exception:
         return None
 
@@ -185,7 +197,13 @@ def search(query: str, quotes_count: int = 8, news_count: int = 6) -> dict:
 
 # ---------- Fundamentals (quoteSummary, best effort) ----------
 
-_SUMMARY_MODULES = "assetProfile,summaryDetail,defaultKeyStatistics,financialData"
+_SUMMARY_MODULES = (
+    "assetProfile,summaryDetail,defaultKeyStatistics,financialData,"
+    "calendarEvents,earnings,recommendationTrend"
+)
+
+_fund_cache: dict[str, tuple[float, dict | None]] = {}
+FUND_TTL_SECONDS = 1800  # fundamentals move on earnings, not on ticks
 
 
 def _fmt_field(container: dict, key: str):
@@ -196,6 +214,9 @@ def _fmt_field(container: dict, key: str):
 
 
 def fetch_fundamentals(symbol: str) -> dict | None:
+    cached = _fund_cache.get(symbol)
+    if cached and time.time() - cached[0] < FUND_TTL_SECONDS:
+        return cached[1]
     pair = _get_crumb_session()
     if pair is None:
         return None
@@ -225,26 +246,174 @@ def fetch_fundamentals(symbol: str) -> dict | None:
         ks = result.get("defaultKeyStatistics", {})
         fd = result.get("financialData", {})
         ap = result.get("assetProfile", {})
-        return {
-            "market_cap": _fmt_field(sd, "marketCap"),
-            "trailing_pe": _fmt_field(sd, "trailingPE"),
-            "forward_pe": _fmt_field(ks, "forwardPE"),
-            "eps": _fmt_field(ks, "trailingEps"),
-            "dividend_yield": _fmt_field(sd, "dividendYield"),
-            "beta": _fmt_field(sd, "beta"),
-            "avg_volume": _fmt_field(sd, "averageVolume"),
-            "profit_margin": _fmt_field(fd, "profitMargins"),
-            "revenue": _fmt_field(fd, "totalRevenue"),
-            "revenue_growth": _fmt_field(fd, "revenueGrowth"),
-            "target_mean_price": _fmt_field(fd, "targetMeanPrice"),
-            "recommendation": fd.get("recommendationKey"),
-            "num_analysts": _fmt_field(fd, "numberOfAnalystOpinions"),
-            "sector": ap.get("sector"),
-            "industry": ap.get("industry"),
-            "employees": ap.get("fullTimeEmployees"),
-            "website": ap.get("website"),
-            "country": ap.get("country"),
-            "description": ap.get("longBusinessSummary"),
+        ce = result.get("calendarEvents", {})
+        earnings = result.get("earnings", {})
+        reco_trend = (result.get("recommendationTrend", {}).get("trend") or [])
+        current_trend = next((t for t in reco_trend if t.get("period") == "0m"), None)
+
+        earnings_dates = [
+            d.get("raw") for d in (ce.get("earnings", {}).get("earningsDate") or []) if d.get("raw")
+        ]
+        quarterly_eps = [
+            {"quarter": q.get("date"), "actual": _fmt_field(q, "actual"), "estimate": _fmt_field(q, "estimate")}
+            for q in (earnings.get("earningsChart", {}).get("quarterly") or [])
+        ]
+        yearly_financials = [
+            {"year": y.get("date"), "revenue": _fmt_field(y, "revenue"), "earnings": _fmt_field(y, "earnings")}
+            for y in (earnings.get("financialsChart", {}).get("yearly") or [])
+        ]
+        officers = [
+            {"name": o.get("name"), "title": o.get("title")}
+            for o in (ap.get("companyOfficers") or [])[:6]
+            if o.get("name")
+        ]
+
+        out = {
+            "valuation": {
+                "market_cap": _fmt_field(sd, "marketCap"),
+                "enterprise_value": _fmt_field(ks, "enterpriseValue"),
+                "trailing_pe": _fmt_field(sd, "trailingPE"),
+                "forward_pe": _fmt_field(ks, "forwardPE"),
+                "peg": _fmt_field(ks, "pegRatio"),
+                "price_to_book": _fmt_field(ks, "priceToBook"),
+                "price_to_sales": _fmt_field(sd, "priceToSalesTrailing12Months"),
+                "ev_to_ebitda": _fmt_field(ks, "enterpriseToEbitda"),
+                "ev_to_revenue": _fmt_field(ks, "enterpriseToRevenue"),
+                "beta": _fmt_field(sd, "beta"),
+            },
+            "profitability": {
+                "revenue": _fmt_field(fd, "totalRevenue"),
+                "revenue_growth": _fmt_field(fd, "revenueGrowth"),
+                "earnings_growth": _fmt_field(fd, "earningsGrowth"),
+                "gross_margin": _fmt_field(fd, "grossMargins"),
+                "operating_margin": _fmt_field(fd, "operatingMargins"),
+                "profit_margin": _fmt_field(fd, "profitMargins"),
+                "ebitda": _fmt_field(fd, "ebitda"),
+                "roe": _fmt_field(fd, "returnOnEquity"),
+                "roa": _fmt_field(fd, "returnOnAssets"),
+                "eps": _fmt_field(ks, "trailingEps"),
+                "forward_eps": _fmt_field(ks, "forwardEps"),
+            },
+            "health": {
+                "total_cash": _fmt_field(fd, "totalCash"),
+                "total_debt": _fmt_field(fd, "totalDebt"),
+                "debt_to_equity": _fmt_field(fd, "debtToEquity"),
+                "current_ratio": _fmt_field(fd, "currentRatio"),
+                "quick_ratio": _fmt_field(fd, "quickRatio"),
+                "free_cashflow": _fmt_field(fd, "freeCashflow"),
+                "operating_cashflow": _fmt_field(fd, "operatingCashflow"),
+            },
+            "dividend": {
+                "yield": _fmt_field(sd, "dividendYield"),
+                "rate": _fmt_field(sd, "dividendRate"),
+                "payout_ratio": _fmt_field(sd, "payoutRatio"),
+                "ex_dividend_date": _fmt_field(sd, "exDividendDate"),
+                "five_year_avg_yield": _fmt_field(sd, "fiveYearAvgDividendYield"),
+            },
+            "ownership": {
+                "shares_outstanding": _fmt_field(ks, "sharesOutstanding"),
+                "float_shares": _fmt_field(ks, "floatShares"),
+                "held_insiders": _fmt_field(ks, "heldPercentInsiders"),
+                "held_institutions": _fmt_field(ks, "heldPercentInstitutions"),
+                "short_ratio": _fmt_field(ks, "shortRatio"),
+                "short_percent_float": _fmt_field(ks, "shortPercentOfFloat"),
+                "avg_volume": _fmt_field(sd, "averageVolume"),
+            },
+            "analyst": {
+                "recommendation": fd.get("recommendationKey"),
+                "recommendation_mean": _fmt_field(fd, "recommendationMean"),
+                "num_analysts": _fmt_field(fd, "numberOfAnalystOpinions"),
+                "target_low": _fmt_field(fd, "targetLowPrice"),
+                "target_mean": _fmt_field(fd, "targetMeanPrice"),
+                "target_median": _fmt_field(fd, "targetMedianPrice"),
+                "target_high": _fmt_field(fd, "targetHighPrice"),
+                "trend": {
+                    "strong_buy": current_trend.get("strongBuy", 0),
+                    "buy": current_trend.get("buy", 0),
+                    "hold": current_trend.get("hold", 0),
+                    "sell": current_trend.get("sell", 0),
+                    "strong_sell": current_trend.get("strongSell", 0),
+                }
+                if current_trend
+                else None,
+            },
+            "calendar": {"next_earnings_date": min(earnings_dates) if earnings_dates else None},
+            "earnings_history": {"quarterly_eps": quarterly_eps, "yearly_financials": yearly_financials},
+            "profile": {
+                "sector": ap.get("sector"),
+                "industry": ap.get("industry"),
+                "employees": ap.get("fullTimeEmployees"),
+                "website": ap.get("website"),
+                "country": ap.get("country"),
+                "city": ap.get("city"),
+                "description": ap.get("longBusinessSummary"),
+                "officers": officers,
+            },
         }
+        _fund_cache[symbol] = (time.time(), out)
+        return out
     except Exception:
         return None
+
+
+# ---------- Global market overview (indices, FX, commodities, crypto, rates) ----------
+
+MARKET_GROUPS: list[tuple[str, list[str]]] = [
+    ("indices", ["^GSPC", "^IXIC", "^DJI", "^FCHI", "^GDAXI", "^FTSE", "^STOXX50E", "^N225", "^HSI"]),
+    ("fx", ["EURUSD=X", "GBPUSD=X", "USDJPY=X", "USDCHF=X", "EURCHF=X", "EURGBP=X"]),
+    ("commodities", ["GC=F", "SI=F", "CL=F", "BZ=F", "NG=F", "HG=F"]),
+    ("crypto", ["BTC-USD", "ETH-USD", "SOL-USD"]),
+    ("rates", ["^IRX", "^FVX", "^TNX", "^TYX"]),
+]
+
+
+def market_overview() -> list[dict]:
+    all_symbols = [s for _, syms in MARKET_GROUPS for s in syms]
+    quotes = fetch_quotes(all_symbols)  # parallel + 20 s cache
+    out = []
+    for key, syms in MARKET_GROUPS:
+        rows = []
+        for s in syms:
+            q = quotes.get(s)
+            if q is not None:
+                rows.append(q)
+        out.append({"group": key, "quotes": rows})
+    return out
+
+
+# ---------- Aggregated live news across a set of symbols ----------
+
+_news_cache: dict[str, tuple[float, list[dict]]] = {}
+NEWS_TTL_SECONDS = 300
+
+
+def aggregate_news(symbols: list[str], limit: int = 30) -> list[dict]:
+    """Latest headlines across the watchlist, deduplicated and time-sorted."""
+    queries = symbols[:12] if symbols else ["stock market"]
+    key = ",".join(sorted(queries))
+    cached = _news_cache.get(key)
+    if cached and time.time() - cached[0] < NEWS_TTL_SECONDS:
+        return cached[1]
+
+    def one(sym: str) -> list[dict]:
+        items = search(sym, quotes_count=0, news_count=8)["news"]
+        for n in items:
+            n["symbol"] = sym
+        return items
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        batches = list(pool.map(one, queries))
+
+    seen: set[str] = set()
+    merged: list[dict] = []
+    for batch in batches:
+        for n in batch:
+            dedupe = n.get("link") or n.get("title", "")
+            if dedupe in seen:
+                continue
+            seen.add(dedupe)
+            merged.append(n)
+    merged.sort(key=lambda n: n.get("published_at") or 0, reverse=True)
+    result = merged[:limit]
+    _news_cache[key] = (time.time(), result)
+    return result

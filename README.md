@@ -168,8 +168,9 @@ historique NAV, cash-flows, transactions et documents de compliance associés.
 | Compliance | `/compliance` | Suivi KYC/AML/suitability par client, renouvellement en un clic, échéances de mandat |
 | Mandats | `/mandates` | Répertoire des mandats de gestion (frais d'entrée/gestion/sortie/performance, hurdle, HWM, benchmark) |
 | CRM | `/crm` | Pipeline prospects/clients en kanban |
-| Watchlist & News | `/market` | Watchlist éditable + fil d'actualités |
-| Page titre | `/security/:symbol` | Page complète par valeur : cours quasi temps réel, graphique 1J→MAX, fondamentaux, profil société, actualités, détention interne |
+| Marchés | `/markets` | Vue globale : indices mondiaux, devises, matières premières, crypto, taux US + fil d'actualités live |
+| Watchlist & News | `/market` | Watchlist éditable + actualités live par valeur |
+| Page titre | `/security/:symbol` | Page complète par valeur : cours quasi temps réel, graphique 1J→MAX (volume, MM50/MM200), ratios complets, consensus analystes, historique de résultats, profil société, actualités, détention interne |
 | Earnings | `/earnings` | Calendrier de résultats avec alertes on/off |
 | Allocation de capital | `/allocation` | Outil de répartition Stock Picking / Arbitrage Algo (risk parity) |
 | Référence | `/reference` | Glossaire, structure des frais, procédures internes |
@@ -179,6 +180,37 @@ Devise d'affichage commutable (USD/EUR/CHF/HKD/JPY/GBP/AED) en haut à droite �
 tous les montants sont reconvertis à la volée via `/api/fx/rates`.
 
 ## Terminal de marché
+
+**Vue des marchés (`/markets`)** : le tableau de bord global — 9 indices
+(S&P 500, Nasdaq, Dow, CAC 40, DAX, FTSE, Euro Stoxx 50, Nikkei, Hang Seng),
+6 paires de devises (dont EUR/CHF), 6 matières premières (or, argent, WTI,
+Brent, gaz, cuivre), crypto (BTC/ETH/SOL) et la courbe des taux US (3 mois →
+30 ans). Chaque ligne est cliquable et rafraîchie toutes les 30 s, avec le
+fil d'actualités live en colonne de droite.
+
+**La page titre (`/security/:symbol`)** en détail :
+
+- **Graphique** : 8 périodes (1J → MAX), volume en barres superposées,
+  moyennes mobiles 50 et 200 jours activables sur les périodes quotidiennes.
+- **Ratios & données financières** en 5 blocs : *Valorisation* (cap., valeur
+  d'entreprise, PER trailing/forward, PEG, P/B, P/S, VE/EBITDA, VE/CA, bêta),
+  *Rentabilité & croissance* (CA, croissances, marges brute/op./nette, EBITDA,
+  ROE, ROA, BPA), *Santé financière* (trésorerie, dette, dette/fonds propres,
+  current & quick ratio, FCF, cash-flow op.), *Dividende* (rendement, montant,
+  payout, ex-date, moyenne 5 ans), *Actionnariat & flottant* (actions en
+  circulation, flottant, initiés, institutionnels, short interest).
+- **Consensus analystes** : note et libellé, répartition achat fort → vente
+  forte en barre, fourchette d'objectifs bas/moyen/haut avec position du
+  cours actuel et upside, prochaine date de résultats.
+- **Historique de résultats** : BPA trimestriel réel vs estimé, CA et
+  bénéfice net annuels sur 4 ans.
+- **Profil** : description, industrie, siège, effectifs, site web, dirigeants.
+- Les champs indisponibles (indices, FX, crypto…) sont masqués — la page
+  dégrade proprement selon le type d'instrument.
+
+**Actualités live** : agrégées par valeur de la watchlist (dédupliquées,
+triées par heure), affichées sur `/markets` et dans l'onglet News de
+`/market`, avec lien vers la source.
 
 Trois éléments transverses, présents sur toutes les pages :
 
@@ -258,10 +290,15 @@ l'année, puis repasser sur *Last Business Day*.
   stockés (watchlist, positions) entre deux synchros IBKR. Pour les places
   étrangères, renseigner le « symbole data » (ex : `0700.HK`, `MC.PA`,
   `NESN.SW`) dans la watchlist.
-- **Fondamentaux, profil société, recherche et actualités** : Yahoo Finance
+- **Fondamentaux, ratios, consensus analystes, historique de résultats,
+  profil société, recherche et actualités** : Yahoo Finance
   (`backend/app/services/securities.py`). L'accès aux fondamentaux passe par
   le mécanisme cookie+crumb de Yahoo ; si Yahoo le durcit un jour, la page
   titre dégrade proprement (cours et graphique restent).
+- **Caches côté backend** pour la réactivité et pour ménager les quotas
+  Yahoo : cotations 20 s, graphiques 1 min (intraday) / 10 min (historique),
+  fondamentaux 30 min, actualités 5 min. Les fetchs multi-symboles (bande,
+  vue des marchés, news) sont parallélisés.
 - **Taux de change** : open.er-api.com (taux réels, AED inclus), rafraîchis
   au démarrage et à la demande.
 - La couche est abstraite dans `backend/app/services/market_data.py` pour

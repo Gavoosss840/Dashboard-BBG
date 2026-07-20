@@ -7,16 +7,10 @@ import { PageHeader } from "../components/ui/PageHeader";
 import { LoadingState, ErrorState } from "../components/ui/States";
 import { formatDateTime, formatMoney, formatPct } from "../lib/format";
 
-const SENTIMENT_COLOR: Record<string, string> = {
-  positive: "var(--status-good)",
-  negative: "var(--status-critical)",
-  neutral: "var(--text-muted)",
-};
-
 export function MarketPage() {
   const [tab, setTab] = useState<"watchlist" | "news">("watchlist");
   const watchlist = useApi(() => api.watchlist(), []);
-  const news = useApi(() => api.news(), []);
+  const news = useApi(() => api.liveNews(), []);
   const [newTicker, setNewTicker] = useState("");
   const [newDataSymbol, setNewDataSymbol] = useState("");
   const [adding, setAdding] = useState(false);
@@ -163,27 +157,30 @@ export function MarketPage() {
       )}
 
       {tab === "news" && (
-        <Card>
+        <Card title="Actualités live (Yahoo Finance, par valeur de la watchlist)">
           {news.loading && <LoadingState />}
           {news.error && <ErrorState message={news.error} />}
-          {news.data && (
+          {news.data && news.data.length === 0 && (
+            <div className="text-sm text-[var(--text-muted)]">
+              Ajoutez des valeurs à la watchlist pour alimenter le fil d'actualités.
+            </div>
+          )}
+          {news.data && news.data.length > 0 && (
             <div className="divide-y divide-white/5">
-              {news.data.map((n) => (
-                <div key={n.id} className="py-3 first:pt-0 last:pb-0">
-                  <div className="flex items-center justify-between">
-                    <div className="font-medium">{n.headline}</div>
-                    <span
-                      className="rounded px-1.5 py-0.5 text-xs capitalize"
-                      style={{ background: "rgba(255,255,255,0.05)", color: SENTIMENT_COLOR[n.sentiment] }}
-                    >
-                      {n.sentiment}
-                    </span>
-                  </div>
+              {news.data.map((n, i) => (
+                <a
+                  key={i}
+                  href={n.link}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block py-3 first:pt-0 last:pb-0 hover:bg-white/[0.03]"
+                >
+                  <div className="font-medium">{n.title}</div>
                   <div className="mt-1 text-xs text-[var(--text-muted)]">
-                    {n.source} · {formatDateTime(n.published_at)} {n.tickers && `· ${n.tickers}`}
+                    <span className="text-[var(--series-1)]">{n.symbol}</span> · {n.publisher}
+                    {n.published_at != null && ` · ${formatDateTime(new Date(n.published_at * 1000).toISOString())}`}
                   </div>
-                  <p className="mt-1 text-sm text-[var(--text-secondary)]">{n.summary}</p>
-                </div>
+                </a>
               ))}
             </div>
           )}

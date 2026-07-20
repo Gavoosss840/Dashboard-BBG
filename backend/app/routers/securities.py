@@ -18,6 +18,20 @@ def search_securities(q: str = Query(..., min_length=1)):
     return securities.search(q)
 
 
+@router.get("/markets")
+def markets_overview():
+    """Global market snapshot: indices, FX, commodities, crypto, US rates."""
+    return securities.market_overview()
+
+
+@router.get("/news")
+def live_news(db: Session = Depends(get_db)):
+    """Aggregated latest headlines for the whole watchlist."""
+    items = db.query(models.WatchlistItem).all()
+    symbols = [(item.data_symbol or item.ticker) for item in items]
+    return securities.aggregate_news(symbols)
+
+
 @router.get("/tape")
 def ticker_tape(db: Session = Depends(get_db)):
     """Quotes for every watchlist item, for the scrolling tape."""

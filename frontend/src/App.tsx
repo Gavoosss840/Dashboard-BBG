@@ -10,6 +10,7 @@ import { CompliancePage } from "./pages/CompliancePage";
 import { MandatesPage } from "./pages/MandatesPage";
 import { CrmPage } from "./pages/CrmPage";
 import { MarketPage } from "./pages/MarketPage";
+import { MarketsPage } from "./pages/MarketsPage";
 import { SecurityPage } from "./pages/SecurityPage";
 import { EarningsPage } from "./pages/EarningsPage";
 import { ReferencePage } from "./pages/ReferencePage";
@@ -46,6 +47,7 @@ function App() {
         <Route path="/compliance" element={<CompliancePage />} />
         <Route path="/mandates" element={<MandatesPage />} />
         <Route path="/crm" element={<CrmPage />} />
+        <Route path="/markets" element={<MarketsPage />} />
         <Route path="/market" element={<MarketPage />} />
         <Route path="/security/:symbol" element={<SecurityPage />} />
         <Route path="/earnings" element={<EarningsPage />} />

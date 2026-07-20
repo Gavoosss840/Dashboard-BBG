@@ -21,6 +21,7 @@ const PAGES: { to: string; label: string; adminOnly?: boolean }[] = [
   { to: "/compliance", label: "Compliance" },
   { to: "/mandates", label: "Mandats" },
   { to: "/crm", label: "CRM" },
+  { to: "/markets", label: "Marchés" },
   { to: "/market", label: "Watchlist & News" },
   { to: "/earnings", label: "Earnings" },
   { to: "/allocation", label: "Allocation de capital" },

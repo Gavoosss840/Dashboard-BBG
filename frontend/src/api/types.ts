@@ -508,26 +508,99 @@ export interface SecuritySearchResult {
   news: SecurityNewsItem[];
 }
 
+export interface RecommendationTrend {
+  strong_buy: number;
+  buy: number;
+  hold: number;
+  sell: number;
+  strong_sell: number;
+}
+
 export interface SecurityFundamentals {
-  market_cap: number | null;
-  trailing_pe: number | null;
-  forward_pe: number | null;
-  eps: number | null;
-  dividend_yield: number | null;
-  beta: number | null;
-  avg_volume: number | null;
-  profit_margin: number | null;
-  revenue: number | null;
-  revenue_growth: number | null;
-  target_mean_price: number | null;
-  recommendation: string | null;
-  num_analysts: number | null;
-  sector: string | null;
-  industry: string | null;
-  employees: number | null;
-  website: string | null;
-  country: string | null;
-  description: string | null;
+  valuation: {
+    market_cap: number | null;
+    enterprise_value: number | null;
+    trailing_pe: number | null;
+    forward_pe: number | null;
+    peg: number | null;
+    price_to_book: number | null;
+    price_to_sales: number | null;
+    ev_to_ebitda: number | null;
+    ev_to_revenue: number | null;
+    beta: number | null;
+  };
+  profitability: {
+    revenue: number | null;
+    revenue_growth: number | null;
+    earnings_growth: number | null;
+    gross_margin: number | null;
+    operating_margin: number | null;
+    profit_margin: number | null;
+    ebitda: number | null;
+    roe: number | null;
+    roa: number | null;
+    eps: number | null;
+    forward_eps: number | null;
+  };
+  health: {
+    total_cash: number | null;
+    total_debt: number | null;
+    debt_to_equity: number | null;
+    current_ratio: number | null;
+    quick_ratio: number | null;
+    free_cashflow: number | null;
+    operating_cashflow: number | null;
+  };
+  dividend: {
+    yield: number | null;
+    rate: number | null;
+    payout_ratio: number | null;
+    ex_dividend_date: number | null;
+    five_year_avg_yield: number | null;
+  };
+  ownership: {
+    shares_outstanding: number | null;
+    float_shares: number | null;
+    held_insiders: number | null;
+    held_institutions: number | null;
+    short_ratio: number | null;
+    short_percent_float: number | null;
+    avg_volume: number | null;
+  };
+  analyst: {
+    recommendation: string | null;
+    recommendation_mean: number | null;
+    num_analysts: number | null;
+    target_low: number | null;
+    target_mean: number | null;
+    target_median: number | null;
+    target_high: number | null;
+    trend: RecommendationTrend | null;
+  };
+  calendar: { next_earnings_date: number | null };
+  earnings_history: {
+    quarterly_eps: { quarter: string; actual: number | null; estimate: number | null }[];
+    yearly_financials: { year: number; revenue: number | null; earnings: number | null }[];
+  };
+  profile: {
+    sector: string | null;
+    industry: string | null;
+    employees: number | null;
+    website: string | null;
+    country: string | null;
+    city: string | null;
+    description: string | null;
+    officers: { name: string; title: string | null }[];
+  };
+}
+
+export interface MarketGroup {
+  group: string;
+  quotes: SecurityQuote[];
+}
+
+export interface LiveNewsItem extends SecurityNewsItem {
+  symbol: string;
 }
 
 export interface SecurityHolding {
