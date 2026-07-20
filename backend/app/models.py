@@ -112,6 +112,11 @@ class Position(Base):
     quantity: Mapped[float] = mapped_column(Float)
     avg_cost: Mapped[float] = mapped_column(Float)
     last_price: Mapped[float] = mapped_column(Float)
+    # Contract multiplier: 1 for stocks/ETFs, but options/futures (a common
+    # hedge/short leg in a long-short book) settle on quantity * price *
+    # multiplier — e.g. 100 for a standard equity option. Left at 1 wrongly
+    # inflates or deflates market value for any account holding derivatives.
+    multiplier: Mapped[float] = mapped_column(Float, default=1.0)
 
     portfolio: Mapped["Portfolio"] = relationship(back_populates="positions")
 

@@ -79,10 +79,16 @@ def get_dashboard(
         summary.pnl_since_inception = agg["pnl_since_inception"]
         summaries.append(summary)
         for p in c.portfolios:
-            mv = pnl.portfolio_market_value(p, rates, ccy)
-            aum_by_bucket[p.strategy_bucket] += mv
+            # Gross exposure (sum of |market value|), not net: a long/short
+            # portfolio nets longs against shorts to a figure that can be
+            # negative or near-zero even on a heavily deployed book, which
+            # makes a net breakdown chart show a nonsensical single bucket at
+            # "100%" of a negative total. Gross reflects capital actually at
+            # work in each bucket/asset class regardless of direction.
             for pos in p.positions:
-                aum_by_asset_class[pos.asset_class] += pnl.position_market_value(pos, rates, ccy)
+                exposure = abs(pnl.position_market_value(pos, rates, ccy))
+                aum_by_bucket[p.strategy_bucket] += exposure
+                aum_by_asset_class[pos.asset_class] += exposure
 
     num_active_mandates = (
         db.query(models.Mandate).filter(models.Mandate.status == "active").count()

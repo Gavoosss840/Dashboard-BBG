@@ -200,6 +200,11 @@ def import_flex(xml_text: str, db: Session) -> dict:
                     continue
                 mark = _num(op, "markPrice")
                 cost = _num(op, "costBasisPrice", "openPrice") or mark
+                # Options/futures settle on quantity * price * multiplier (e.g. 100
+                # for a standard equity option) — IBKR always reports it, including
+                # "1" for stocks/ETFs. Falling back to 1 covers older exports that
+                # omit the attribute entirely.
+                multiplier = _num(op, "multiplier") or 1.0
                 db.add(models.Position(
                     portfolio_id=portfolio.id,
                     ticker=_attr(op, "symbol"),
@@ -211,6 +216,7 @@ def import_flex(xml_text: str, db: Session) -> dict:
                     quantity=qty,
                     avg_cost=cost,
                     last_price=mark,
+                    multiplier=multiplier,
                 ))
                 stats["positions"] += 1
 
@@ -287,10 +293,24 @@ def import_flex(xml_text: str, db: Session) -> dict:
             stats["nav_points"] += 1
 
         # ---- Cash balances per currency (replace) ----
-        cash_rows = [
+        # A margin account that shorts securities (any long/short book) reports
+        # cash per SEGMENT as well as per currency — e.g. a "Securities" row and
+        # a "Futures" row both carrying currency="USD" — when the Flex Query has
+        # per-segment detail enabled. Summing every row blindly double- or
+        # triple-counts cash. levelOfDetail="Currency" is the netted, segment-
+        # independent figure; keep only that level when it's present, and as a
+        # final guard never keep more than one row per currency.
+        cash_rows_raw = [
             cr for cr in stmt.iter("CashReportCurrency")
             if _attr(cr, "currency").upper() not in ("", "BASE_SUMMARY")
         ]
+        detail_levels = {_attr(cr, "levelOfDetail") for cr in cash_rows_raw}
+        if "Currency" in detail_levels:
+            cash_rows_raw = [cr for cr in cash_rows_raw if _attr(cr, "levelOfDetail") == "Currency"]
+        cash_by_currency: dict[str, ET.Element] = {}
+        for cr in cash_rows_raw:
+            cash_by_currency[_attr(cr, "currency").upper()] = cr
+        cash_rows = list(cash_by_currency.values())
         if cash_rows:
             db.query(models.CashBalance).filter(models.CashBalance.portfolio_id == portfolio.id).delete(
                 synchronize_session=False

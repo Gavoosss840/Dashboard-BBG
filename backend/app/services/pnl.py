@@ -7,12 +7,12 @@ from app.services import fx
 # ---------- Position / portfolio building blocks ----------
 
 def position_market_value(pos: models.Position, rates: dict, target_ccy: str) -> float:
-    mv = pos.quantity * pos.last_price
+    mv = pos.quantity * pos.last_price * (pos.multiplier or 1.0)
     return fx.convert(mv, pos.currency, target_ccy, rates)
 
 
 def position_unrealized_pnl(pos: models.Position, rates: dict, target_ccy: str) -> float:
-    pnl = (pos.last_price - pos.avg_cost) * pos.quantity
+    pnl = (pos.last_price - pos.avg_cost) * pos.quantity * (pos.multiplier or 1.0)
     return fx.convert(pnl, pos.currency, target_ccy, rates)
 
 
