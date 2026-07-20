@@ -2,7 +2,7 @@ import bisect
 from collections import defaultdict
 
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, selectinload
 
 from app import models, schemas
 from app.database import get_db
@@ -50,9 +50,11 @@ def get_dashboard(
     clients = (
         db.query(models.Client)
         .options(
-            joinedload(models.Client.portfolios).joinedload(models.Portfolio.positions),
-            joinedload(models.Client.portfolios).joinedload(models.Portfolio.nav_history),
-            joinedload(models.Client.cash_flows),
+            # selectinload, not joinedload — same cartesian-product risk as
+            # clients.py._client_query for a client with a large IBKR book.
+            selectinload(models.Client.portfolios).selectinload(models.Portfolio.positions),
+            selectinload(models.Client.portfolios).selectinload(models.Portfolio.nav_history),
+            selectinload(models.Client.cash_flows),
         )
         .all()
     )

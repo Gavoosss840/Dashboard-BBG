@@ -1,7 +1,7 @@
 import datetime as dt
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app import models, schemas
 from app.database import get_db
@@ -14,13 +14,22 @@ router = APIRouter(prefix="/api/clients", tags=["clients"])
 
 
 def _client_query(db: Session):
+    # selectinload (separate batched query per collection), not joinedload:
+    # this client fans out into several one-to-many collections at once
+    # (portfolios -> positions / nav_history / cash_balances, plus mandates
+    # and cash_flows). Joining them all in one SQL statement multiplies rows
+    # combinatorially (positions x nav_history x cash_balances per portfolio)
+    # — harmless for a small demo book, but a real IBKR-synced account with
+    # hundreds of positions and months of NAV history turns into millions of
+    # SQL rows for a single client fetch. selectinload loads each collection
+    # with its own "WHERE parent_id IN (...)" query instead, with no fan-out.
     return db.query(models.Client).options(
         joinedload(models.Client.relationship_manager),
-        joinedload(models.Client.mandates),
-        joinedload(models.Client.portfolios).joinedload(models.Portfolio.positions),
-        joinedload(models.Client.portfolios).joinedload(models.Portfolio.nav_history),
-        joinedload(models.Client.portfolios).joinedload(models.Portfolio.cash_balances),
-        joinedload(models.Client.cash_flows),
+        selectinload(models.Client.mandates),
+        selectinload(models.Client.portfolios).selectinload(models.Portfolio.positions),
+        selectinload(models.Client.portfolios).selectinload(models.Portfolio.nav_history),
+        selectinload(models.Client.portfolios).selectinload(models.Portfolio.cash_balances),
+        selectinload(models.Client.cash_flows),
     )
 
 

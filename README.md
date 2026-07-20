@@ -438,6 +438,34 @@ n'est pas un gain), et le **TWR** (time-weighted return) est calculé en
 chaînant les NAV officielles quotidiennes avec les flux — c'est la mesure de
 performance présentable à un client ou un régulateur.
 
+## Tenue en charge (gros comptes IBKR)
+
+La plateforme a été mesurée avec un portefeuille de test simulant un compte
+algo actif : 300 positions, 15 000 trades, 500 points de NAV. Deux
+optimisations la rendent viable à cette échelle :
+
+- **Chargement des relations** (`clients.py`, `dashboard.py`, `financier.py`,
+  `portfolios.py`, `risk.py`) : `selectinload` au lieu de `joinedload` pour
+  les collections one-to-many multiples chargées sur un même parent (ex :
+  positions + historique NAV + soldes de cash d'un portefeuille). Joindre
+  plusieurs collections en une seule requête SQL multiplie les lignes entre
+  elles (produit cartésien) — inoffensif avec quelques positions de démo,
+  mais un compte réel avec des centaines de positions et des mois
+  d'historique peut générer des centaines de milliers de lignes SQL pour une
+  simple fiche client. `selectinload` charge chaque collection avec sa
+  propre requête, sans multiplication.
+- **Import IBKR** (`services/ibkr.py`) : la déduplication des trades et des
+  mouvements de cash se fait contre des ensembles Python chargés en une
+  requête chacun, plus des commits par lots de 500 pendant la boucle des
+  trades — au lieu d'une requête SQL individuelle par ligne dans une seule
+  transaction géante (qui bloquait l'écriture SQLite, donc toute la
+  plateforme, pendant toute la durée de l'import). Résultat mesuré :
+  15 000 trades importés en ~1,3 s ; une resynchronisation du même relevé
+  (déduplication complète) en ~0,15 s.
+- **Mode WAL SQLite** (`database.py`) activé au niveau du moteur : les
+  lectures ne sont plus bloquées par une écriture en cours (une synchro, un
+  import), en défense en profondeur au-delà des deux points ci-dessus.
+
 ## Pistes d'amélioration restantes
 
 - Moteur d'alertes + centre de notifications (prix cible, drawdown, earnings,

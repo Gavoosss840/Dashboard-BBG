@@ -1,7 +1,7 @@
 from collections import defaultdict
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app import models, schemas
 from app.database import get_db
@@ -86,7 +86,10 @@ def get_portfolio(
 ):
     portfolio = (
         db.query(models.Portfolio)
-        .options(joinedload(models.Portfolio.positions), joinedload(models.Portfolio.nav_history))
+        # selectinload for both — joining two one-to-many collections on the
+        # same parent multiplies rows (positions x nav_history), which blows
+        # up for a large, long-running IBKR-synced portfolio.
+        .options(selectinload(models.Portfolio.positions), selectinload(models.Portfolio.nav_history))
         .filter(models.Portfolio.id == portfolio_id)
         .first()
     )

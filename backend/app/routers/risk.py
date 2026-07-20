@@ -8,7 +8,7 @@ import datetime as dt
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, selectinload
 
 from app import models
 from app.database import get_db
@@ -90,7 +90,9 @@ def check_trade(payload: RiskCheckRequest, db: Session = Depends(get_db)):
     rates = fx.get_rates(db)
     portfolios = (
         db.query(models.Portfolio)
-        .options(joinedload(models.Portfolio.positions), joinedload(models.Portfolio.cash_balances))
+        # selectinload — two one-to-many collections on the same parent would
+        # multiply rows if joined directly (positions x cash_balances).
+        .options(selectinload(models.Portfolio.positions), selectinload(models.Portfolio.cash_balances))
         .all()
     )
     nav_usd = sum(pnl.portfolio_current_nav(p, rates, "USD") for p in portfolios)

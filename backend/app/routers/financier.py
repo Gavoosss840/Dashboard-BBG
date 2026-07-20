@@ -2,7 +2,7 @@ import datetime as dt
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app import models, schemas
 from app.database import get_db
@@ -82,7 +82,12 @@ def _mandate_query(db: Session):
     return (
         db.query(models.Mandate)
         .options(
-            joinedload(models.Mandate.client).joinedload(models.Client.portfolios).joinedload(models.Portfolio.nav_history)
+            # client is many-to-one (cheap join); portfolios -> nav_history is
+            # a one-to-many chain, so selectinload to avoid row multiplication
+            # for a client with a large, long-synced portfolio.
+            joinedload(models.Mandate.client)
+            .selectinload(models.Client.portfolios)
+            .selectinload(models.Portfolio.nav_history)
         )
         .filter(models.Mandate.status == "active")
     )
@@ -183,7 +188,7 @@ def crystallize_performance_fee(mandate_id: int, db: Session = Depends(get_db), 
 
 def _current_aum(db: Session, rates: dict, ccy: str) -> float:
     clients = db.query(models.Client).options(
-        joinedload(models.Client.portfolios).joinedload(models.Portfolio.nav_history)
+        selectinload(models.Client.portfolios).selectinload(models.Portfolio.nav_history)
     ).all()
     return pnl.total_aum(clients, rates, ccy)
 

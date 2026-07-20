@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from app import models
@@ -110,18 +111,20 @@ def security_overview(symbol: str, db: Session = Depends(get_db)):
         quote["price"], fundamentals, sigma_equity=sigma_equity, momentum_closes=momentum_closes
     )
 
-    # Cross-reference with internal portfolios (positions use the IBKR/display ticker)
+    # Cross-reference with internal portfolios (positions use the IBKR/display ticker).
+    # Filtered at the DB level, not loaded-then-filtered-in-Python — a large
+    # IBKR-synced book can hold thousands of position rows platform-wide, and
+    # this endpoint is hit on every security page view.
     root = _root_symbol(symbol)
     positions = (
         db.query(models.Position)
+        .filter(func.upper(models.Position.ticker) == root)
         .options(joinedload(models.Position.portfolio).joinedload(models.Portfolio.client))
         .all()
     )
     holdings = []
     total_qty = 0.0
     for pos in positions:
-        if pos.ticker.upper() != root:
-            continue
         client = pos.portfolio.client if pos.portfolio else None
         holdings.append({
             "client_id": client.id if client else None,

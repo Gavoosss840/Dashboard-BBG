@@ -140,17 +140,43 @@ ASSET_CLASS_MAP = {
 }
 
 
+TRADE_COMMIT_BATCH = 500  # flush+commit this often during the trades loop
+
+
 def import_flex(xml_text: str, db: Session) -> dict:
     """Import a Flex statement into the platform. Idempotent: positions and
-    balances are replaced, trades/cash-flows/NAV points are deduplicated."""
+    balances are replaced, trades/cash-flows/NAV points are deduplicated.
+
+    Dedup is checked against Python sets loaded with one query each up
+    front, not with a SELECT per row. A large, actively-traded algo account
+    can carry tens of thousands of trades — checking existence row-by-row
+    meant tens of thousands of synchronous round trips inside a single
+    transaction, which held SQLite's write lock long enough to stall every
+    other request on the platform for the whole duration of the sync.
+    Commits are also flushed periodically during the trades loop so that
+    lock is never held for the entire import at once.
+    """
     root = ET.fromstring(xml_text)
     portfolios_by_account = {p.ptf_id: p for p in db.query(models.Portfolio).all()}
+
+    existing_exec_ids: set[str] = {row[0] for row in db.query(models.Trade.ibkr_exec_id).all()}
+    existing_cash_flow_keys: set[tuple] = {
+        (r.client_id, r.date, r.amount, r.currency, r.flow_type)
+        for r in db.query(
+            models.CashFlow.client_id, models.CashFlow.date, models.CashFlow.amount,
+            models.CashFlow.currency, models.CashFlow.flow_type,
+        ).all()
+    }
+    existing_nav: dict[tuple, models.NavHistory] = {
+        (r.portfolio_id, r.date): r for r in db.query(models.NavHistory).all()
+    }
 
     stats = {
         "accounts_matched": [], "accounts_unmatched": [],
         "positions": 0, "trades_new": 0, "trades_skipped": 0,
         "cash_flows_new": 0, "nav_points": 0, "cash_balances": 0,
     }
+    trades_since_commit = 0
 
     for stmt in root.iter("FlexStatement"):
         account_id = _attr(stmt, "accountId")
@@ -188,13 +214,12 @@ def import_flex(xml_text: str, db: Session) -> dict:
                 ))
                 stats["positions"] += 1
 
-        # ---- Trades: dedup on IBKR execution/trade id ----
+        # ---- Trades: dedup on IBKR execution/trade id (bulk-loaded set) ----
         for tr in stmt.iter("Trade"):
             exec_id = _attr(tr, "ibExecID", "tradeID", "transactionID")
             if not exec_id:
                 continue
-            exists = db.query(models.Trade.id).filter(models.Trade.ibkr_exec_id == exec_id).first()
-            if exists:
+            if exec_id in existing_exec_ids:
                 stats["trades_skipped"] += 1
                 continue
             trade_date = _date(_attr(tr, "tradeDate", "dateTime"))
@@ -217,7 +242,12 @@ def import_flex(xml_text: str, db: Session) -> dict:
                 source="ibkr",
                 ibkr_exec_id=exec_id,
             ))
+            existing_exec_ids.add(exec_id)
             stats["trades_new"] += 1
+            trades_since_commit += 1
+            if trades_since_commit >= TRADE_COMMIT_BATCH:
+                db.commit()
+                trades_since_commit = 0
 
         # ---- Cash transactions (deposits/withdrawals) -> client CashFlow ----
         for ct in stmt.iter("CashTransaction"):
@@ -230,23 +260,14 @@ def import_flex(xml_text: str, db: Session) -> dict:
             amount = _num(ct, "amount")
             currency = _attr(ct, "currency", default="USD")
             flow_type = "deposit" if amount >= 0 else "withdrawal"
-            exists = (
-                db.query(models.CashFlow.id)
-                .filter(
-                    models.CashFlow.client_id == client_id,
-                    models.CashFlow.date == flow_date,
-                    models.CashFlow.amount == abs(amount),
-                    models.CashFlow.currency == currency,
-                    models.CashFlow.flow_type == flow_type,
-                )
-                .first()
-            )
-            if exists:
+            key = (client_id, flow_date, abs(amount), currency, flow_type)
+            if key in existing_cash_flow_keys:
                 continue
             db.add(models.CashFlow(
                 client_id=client_id, date=flow_date,
                 flow_type=flow_type, amount=abs(amount), currency=currency,
             ))
+            existing_cash_flow_keys.add(key)
             stats["cash_flows_new"] += 1
 
         # ---- Official NAV history ----
@@ -255,15 +276,14 @@ def import_flex(xml_text: str, db: Session) -> dict:
             total = _num(eq, "total")
             if report_date is None or total == 0:
                 continue
-            existing = (
-                db.query(models.NavHistory)
-                .filter(models.NavHistory.portfolio_id == portfolio.id, models.NavHistory.date == report_date)
-                .first()
-            )
+            nav_key = (portfolio.id, report_date)
+            existing = existing_nav.get(nav_key)
             if existing:
                 existing.nav = total
             else:
-                db.add(models.NavHistory(portfolio_id=portfolio.id, date=report_date, nav=total))
+                new_nav = models.NavHistory(portfolio_id=portfolio.id, date=report_date, nav=total)
+                db.add(new_nav)
+                existing_nav[nav_key] = new_nav
             stats["nav_points"] += 1
 
         # ---- Cash balances per currency (replace) ----
