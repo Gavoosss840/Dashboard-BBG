@@ -224,15 +224,33 @@ recherche ; le risque peut bloquer le trade — c'est tout l'intérêt »* :
    analystes, note moyenne, short interest, détention institutionnelle).
 2. **Verdict de valorisation** (`backend/app/services/valuation.py`) :
    estime une juste valeur et le potentiel de hausse/baisse à l'instant T,
-   avec un verdict SOUS-ÉVALUÉ / CORRECT / SURÉVALUÉ (seuils ±15%) et une
-   jauge. Le moteur est **componentiel** : objectif analystes pondéré par la
-   couverture, nombre de Graham (exclu quand le P/B est extrême), juste
-   valeur PEG=1 (Lynch), DCF simplifié sur le FCF. Chaque composant affiche
-   son calcul et son poids — transparence totale. **L'algo propriétaire
-   Taurus se branche dans `taurus_components()`** : dès que ses formules
-   sont fournies, il remplace le blend standard et l'interface affiche le
-   badge « Algo Taurus ». Aide à la décision interne, pas un conseil
-   d'investissement.
+   avec un verdict SOUS-ÉVALUÉ / CORRECT / SURÉVALUÉ et une jauge. Deux
+   moteurs partagent le même affichage :
+   - **Algo Taurus** (`backend/app/services/taurus.py`) — **port fidèle**
+     (validé bit-à-bit) du moteur Modigliani-Miller de la stratégie
+     [Trading-strategy-Taurus](https://github.com/Gavoosss840/Trading-strategy-Taurus).
+     Valeur théorique levée `VL = valeur d'entreprise − coûts de détresse
+     (Merton, queue Student-t ν=5) − coûts d'agence`, avec taux de distress
+     par secteur, spread de crédit fonction du levier, et probabilité de
+     défaut de Merton. La **divergence** `(VL − capitalisation) / capitalisation`
+     donne directement le sur/sous-évaluation à l'instant T (seuil ±25 %,
+     comme dans Taurus). La carte affiche la décomposition complète (VE,
+     dette nette, bouclier fiscal, détresse, agence, P(défaut), levier) et le
+     **momentum vol-ajusté** (Jegadeesh-Titman 12M‑1M / Barroso-Santa-Clara)
+     comme confirmation de tendance. Actif dès que Yahoo fournit le bilan
+     (capitalisation, dette, fonds propres) — badge « ⬢ Algo Taurus ».
+   - **Modèle standard** (fallback transparent) — objectif analystes pondéré,
+     nombre de Graham, juste valeur PEG=1 (Lynch), DCF simplifié FCF — utilisé
+     pour les instruments sans bilan (indices, ETF, FX, crypto).
+
+   > Note : la couche complète de Taurus est un signal composite
+   > cross-sectionnel `w_α·z(alpha FF5/FF6) + w_mm·z(divergence MM) +
+   > w_mom·z(momentum)` calculé sur tout un univers au rebalancement mensuel.
+   > L'alpha factoriel FF5/FF6 est un classement inter-titres (régression
+   > 60 mois sur l'indice), pas une valeur ponctuelle par titre : le terminal
+   > expose donc la **valorisation MM** (l'estimation intrinsèque par titre)
+   > et le momentum, qui se calculent fidèlement à l'instant T.
+   > Aide à la décision interne, pas un conseil d'investissement.
 3. **Risk Gate** (`backend/app/routers/risk.py`) : le trade proposé passe
    5 règles évaluées contre le portefeuille réel — taille de position
    (% NAV), exposition sectorielle après trade, gel en cas de drawdown

@@ -81,6 +81,18 @@ def security_overview(symbol: str, db: Session = Depends(get_db)):
     fundamentals = securities.fetch_fundamentals(symbol)
     news = securities.search(symbol, quotes_count=0, news_count=8)["news"]
 
+    # Taurus MM valuation needs realised volatility and a momentum series; a 1y
+    # daily chart supplies both (cached, so this is cheap on repeat views).
+    sigma_equity = None
+    momentum_closes = None
+    chart = securities.fetch_chart(symbol, "1y")
+    if chart and chart["points"]:
+        momentum_closes = [pt["c"] for pt in chart["points"]]
+        sigma_equity = securities.annualised_vol(momentum_closes)
+    valuation_result = valuation.compute_valuation(
+        quote["price"], fundamentals, sigma_equity=sigma_equity, momentum_closes=momentum_closes
+    )
+
     # Cross-reference with internal portfolios (positions use the IBKR/display ticker)
     root = _root_symbol(symbol)
     positions = (
@@ -116,7 +128,7 @@ def security_overview(symbol: str, db: Session = Depends(get_db)):
     return {
         "quote": quote,
         "fundamentals": fundamentals,
-        "valuation": valuation.compute_valuation(quote["price"], fundamentals),
+        "valuation": valuation_result,
         "news": news,
         "holdings": holdings,
         "total_quantity": total_qty,

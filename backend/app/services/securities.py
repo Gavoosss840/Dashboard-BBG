@@ -158,6 +158,16 @@ def fetch_chart(symbol: str, range_key: str) -> dict | None:
         return None
 
 
+def annualised_vol(closes: list[float]) -> float | None:
+    """Annualised volatility from a daily close series (×√252)."""
+    rets = [closes[i] / closes[i - 1] - 1.0 for i in range(1, len(closes)) if closes[i - 1] > 0]
+    if len(rets) < 20:
+        return None
+    mean = sum(rets) / len(rets)
+    var = sum((r - mean) ** 2 for r in rets) / (len(rets) - 1)
+    return (var ** 0.5) * (252 ** 0.5)
+
+
 # ---------- Search (symbols + news) ----------
 
 def search(query: str, quotes_count: int = 8, news_count: int = 6) -> dict:

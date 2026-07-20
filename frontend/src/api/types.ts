@@ -632,14 +632,42 @@ export interface ValuationComponent {
   upside_pct: number;
 }
 
+export interface TaurusMomentum {
+  mom_raw: number;
+  mom_vol: number | null;
+  mom_sharpe: number | null;
+}
+
+export interface TaurusDetail {
+  vl_theoretical: number;
+  market_cap: number;
+  enterprise_value: number;
+  net_debt: number;
+  pv_tax_shield: number;
+  pv_distress: number;
+  pv_agency: number;
+  prob_default: number;
+  credit_spread: number;
+  distress_rate: number;
+  leverage_ratio: number;
+  ic_ratio: number | null;
+  underleveraged: boolean;
+  overleveraged: boolean;
+  sigma_equity: number | null;
+  sigma_assets: number;
+  momentum: TaurusMomentum | null;
+}
+
 export interface Valuation {
   model: "standard" | "taurus";
   fair_value: number;
   price: number;
   upside_pct: number;
   verdict: "undervalued" | "fair" | "overvalued";
+  threshold_pct: number;
   confidence: string;
   components: ValuationComponent[];
+  taurus?: TaurusDetail;
 }
 
 export interface RiskSettings {
