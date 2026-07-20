@@ -207,32 +207,51 @@ def import_flex(xml_text: str, db: Session) -> dict:
                 qty = _num(op, "position", "quantity")
                 if qty == 0:
                     continue
-                mark = _num(op, "markPrice")
+                mark = _num(op, "markPrice")  # per-share, position's LOCAL currency
                 # Options/futures settle on quantity * price * multiplier (e.g. 100
                 # for a standard equity option) — IBKR always reports it, including
                 # "1" for stocks/ETFs. Falling back to 1 covers older exports that
                 # omit the attribute entirely.
                 multiplier = _num(op, "multiplier") or 1.0
+                # IBKR mixes currencies within one OpenPosition element: per-share
+                # price fields (markPrice, costBasisPrice) are in the position's
+                # LOCAL/trading currency, but aggregate value/P&L fields (costBasis,
+                # fifoPnlUnrealized) are in the ACCOUNT'S BASE currency — e.g. a
+                # SAR-quoted Saudi stock on a EUR account reports its price in SAR
+                # but its cost/P&L totals in EUR. avg_cost must stay in LOCAL
+                # currency (everything downstream, incl. fx.convert(), assumes
+                # pos.currency), so base-currency fallbacks need converting back to
+                # local via IBKR's own per-position rate before use — mixing the two
+                # unconverted, as an earlier version of this code did, silently
+                # corrupts the cost basis for every non-base-currency position.
+                fx_to_base = _num(op, "fxRateToBase") or 1.0
                 # Per-share cost basis, tried in decreasing order of reliability:
-                #   1. costBasisPrice/openPrice — a direct per-share figure.
-                #   2. costBasis (total position cost) / quantity — some Flex Query
-                #      configurations only expose the total, not a per-share price.
+                #   1. costBasisPrice/openPrice — a direct per-share figure, local.
+                #   2. costBasis (total position cost, BASE ccy) / quantity —
+                #      converted back to local — some Flex Query configurations
+                #      only expose the total, not a per-share price.
                 #   3. Back out avg_cost from IBKR's own already-computed
-                #      fifoPnlUnrealized, so our downstream (mark - avg_cost) * qty
-                #      * multiplier reproduces exactly the P&L IBKR reports — this
+                #      fifoPnlUnrealized (BASE ccy, converted back to local), so
+                #      downstream (mark - avg_cost) * qty * multiplier, converted to
+                #      the display currency, reproduces the P&L IBKR reports — this
                 #      is present on effectively every Flex export regardless of
                 #      which cost-basis fields the query includes.
-                #   4. mark price, i.e. an honest "unknown" (0 unrealized P&L)
-                #      when the statement carries no cost information at all.
+                #   4. mark price, i.e. an honest "unknown" (0 unrealized P&L) when
+                #      the statement carries no cost information at all.
                 cost = _num(op, "costBasisPrice", "openPrice")
                 if not cost:
-                    total_cost = _num(op, "costBasis")
-                    if total_cost and qty:
-                        cost = abs(total_cost / qty)
+                    total_cost_base = _num(op, "costBasis")
+                    if total_cost_base and qty:
+                        total_cost_local = total_cost_base / fx_to_base
+                        cost = abs(total_cost_local / qty)
                 if not cost:
-                    fifo_pnl = _num(op, "fifoPnlUnrealized")
+                    fifo_pnl_base = _num(op, "fifoPnlUnrealized")
                     denom = qty * multiplier
-                    cost = mark - fifo_pnl / denom if fifo_pnl and denom else mark
+                    if fifo_pnl_base and denom:
+                        fifo_pnl_local = fifo_pnl_base / fx_to_base
+                        cost = mark - fifo_pnl_local / denom
+                    else:
+                        cost = mark
                 db.add(models.Position(
                     portfolio_id=portfolio.id,
                     ticker=_attr(op, "symbol"),
