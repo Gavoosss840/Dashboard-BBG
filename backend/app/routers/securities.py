@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app import models
 from app.database import get_db
-from app.services import securities
+from app.services import securities, valuation
 
 router = APIRouter(prefix="/api/securities", tags=["securities"])
 
@@ -116,6 +116,7 @@ def security_overview(symbol: str, db: Session = Depends(get_db)):
     return {
         "quote": quote,
         "fundamentals": fundamentals,
+        "valuation": valuation.compute_valuation(quote["price"], fundamentals),
         "news": news,
         "holdings": holdings,
         "total_quantity": total_qty,

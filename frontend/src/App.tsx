@@ -11,6 +11,7 @@ import { MandatesPage } from "./pages/MandatesPage";
 import { CrmPage } from "./pages/CrmPage";
 import { MarketPage } from "./pages/MarketPage";
 import { MarketsPage } from "./pages/MarketsPage";
+import { ResearchPage } from "./pages/ResearchPage";
 import { SecurityPage } from "./pages/SecurityPage";
 import { EarningsPage } from "./pages/EarningsPage";
 import { ReferencePage } from "./pages/ReferencePage";
@@ -50,6 +51,8 @@ function App() {
         <Route path="/markets" element={<MarketsPage />} />
         <Route path="/market" element={<MarketPage />} />
         <Route path="/security/:symbol" element={<SecurityPage />} />
+        <Route path="/research" element={<ResearchPage />} />
+        <Route path="/research/:symbol" element={<ResearchPage />} />
         <Route path="/earnings" element={<EarningsPage />} />
         <Route path="/reference" element={<ReferencePage />} />
         <Route path="/users" element={<UsersPage />} />

@@ -615,9 +615,52 @@ export interface SecurityHolding {
 export interface SecurityOverview {
   quote: SecurityQuote;
   fundamentals: SecurityFundamentals | null;
+  valuation: Valuation | null;
   news: SecurityNewsItem[];
   holdings: SecurityHolding[];
   total_quantity: number;
   in_watchlist: boolean;
   watchlist_item_id: number | null;
+}
+
+export interface ValuationComponent {
+  key: string;
+  label: string;
+  fair_value: number;
+  weight: number;
+  detail: string;
+  upside_pct: number;
+}
+
+export interface Valuation {
+  model: "standard" | "taurus";
+  fair_value: number;
+  price: number;
+  upside_pct: number;
+  verdict: "undervalued" | "fair" | "overvalued";
+  confidence: string;
+  components: ValuationComponent[];
+}
+
+export interface RiskSettings {
+  max_position_pct: number;
+  max_sector_pct: number;
+  max_drawdown_pct: number;
+  stop_loss_pct: number;
+  kill_switch: boolean;
+}
+
+export interface RiskRuleResult {
+  key: string;
+  label: string;
+  status: "pass" | "blocked" | "info";
+  detail: string;
+}
+
+export interface RiskCheckResult {
+  verdict: "PASS" | "BLOCKED";
+  rules: RiskRuleResult[];
+  suggested_stop: number | null;
+  nav_usd: number;
+  amount_usd: number;
 }

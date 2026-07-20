@@ -27,6 +27,8 @@ import type {
   Position,
   PositionInput,
   ReferenceEntry,
+  RiskCheckResult,
+  RiskSettings,
   SecurityChart,
   SecurityOverview,
   SecurityQuote,
@@ -233,6 +235,12 @@ export const api = {
     request<SecurityChart>(`/api/securities/${encodeURIComponent(symbol)}/chart?range=${range}`),
   securityOverview: (symbol: string) =>
     request<SecurityOverview>(`/api/securities/${encodeURIComponent(symbol)}/overview`),
+
+  riskSettings: () => request<RiskSettings>(`/api/risk/settings`),
+  updateRiskSettings: (payload: Partial<RiskSettings>) =>
+    request<RiskSettings>(`/api/risk/settings`, { method: "PATCH", body: JSON.stringify(payload) }),
+  riskCheck: (payload: { symbol: string; amount: number; currency?: string; price?: number | null; sector?: string | null }) =>
+    request<RiskCheckResult>(`/api/risk/check`, { method: "POST", body: JSON.stringify(payload) }),
 
   aumTargets: (ccy: string) => request<AumTarget[]>(`/api/financier/aum-targets?ccy=${ccy}`),
   createAumTarget: (payload: AumTargetInput, ccy = "EUR") =>

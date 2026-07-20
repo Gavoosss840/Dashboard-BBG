@@ -169,6 +169,7 @@ historique NAV, cash-flows, transactions et documents de compliance associés.
 | Mandats | `/mandates` | Répertoire des mandats de gestion (frais d'entrée/gestion/sortie/performance, hurdle, HWM, benchmark) |
 | CRM | `/crm` | Pipeline prospects/clients en kanban |
 | Marchés | `/markets` | Vue globale : indices mondiaux, devises, matières premières, crypto, taux US + fil d'actualités live |
+| Recherche Equity | `/research/:symbol?` | Workflow de recherche : 4 feeds (prix, news, données, sentiment) → verdict de valorisation → Risk Gate |
 | Watchlist & News | `/market` | Watchlist éditable + actualités live par valeur |
 | Page titre | `/security/:symbol` | Page complète par valeur : cours quasi temps réel, graphique 1J→MAX (volume, MM50/MM200), ratios complets, consensus analystes, historique de résultats, profil société, actualités, détention interne |
 | Earnings | `/earnings` | Calendrier de résultats avec alertes on/off |
@@ -211,6 +212,37 @@ fil d'actualités live en colonne de droite.
 **Actualités live** : agrégées par valeur de la watchlist (dédupliquées,
 triées par heure), affichées sur `/markets` et dans l'onglet News de
 `/market`, avec lien vers la source.
+
+## Recherche Equity & Risk Gate
+
+Le workflow de recherche (`/research`) suit le principe *« d'abord, la
+recherche ; le risque peut bloquer le trade — c'est tout l'intérêt »* :
+
+1. **Quatre feeds d'entrée** par titre : 01 Price Feed (cours, plages),
+   02 News Feed (dernières actualités), 03 Market Data (indicateurs et
+   fondamentaux clés), 04 Sentiment (répartition des recommandations
+   analystes, note moyenne, short interest, détention institutionnelle).
+2. **Verdict de valorisation** (`backend/app/services/valuation.py`) :
+   estime une juste valeur et le potentiel de hausse/baisse à l'instant T,
+   avec un verdict SOUS-ÉVALUÉ / CORRECT / SURÉVALUÉ (seuils ±15%) et une
+   jauge. Le moteur est **componentiel** : objectif analystes pondéré par la
+   couverture, nombre de Graham (exclu quand le P/B est extrême), juste
+   valeur PEG=1 (Lynch), DCF simplifié sur le FCF. Chaque composant affiche
+   son calcul et son poids — transparence totale. **L'algo propriétaire
+   Taurus se branche dans `taurus_components()`** : dès que ses formules
+   sont fournies, il remplace le blend standard et l'interface affiche le
+   badge « Algo Taurus ». Aide à la décision interne, pas un conseil
+   d'investissement.
+3. **Risk Gate** (`backend/app/routers/risk.py`) : le trade proposé passe
+   5 règles évaluées contre le portefeuille réel — taille de position
+   (% NAV), exposition sectorielle après trade, gel en cas de drawdown
+   au-delà du seuil, stop loss de discipline (niveau d'invalidation
+   suggéré), et un **kill switch** d'arrêt d'urgence. Toutes les règles
+   passent, ou le trade est BLOQUÉ — aucune exception. Les seuils sont
+   éditables dans l'interface (`/api/risk/settings`).
+
+La carte de valorisation apparaît aussi sur chaque page titre, avec un lien
+« Recherche Equity → » pour ouvrir le workflow complet.
 
 Trois éléments transverses, présents sur toutes les pages :
 

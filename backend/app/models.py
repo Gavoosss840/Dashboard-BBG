@@ -370,3 +370,16 @@ class ComplianceDocument(Base):
     notes: Mapped[str] = mapped_column(Text, default="")
 
     client: Mapped["Client"] = relationship()
+
+
+class RiskSettings(Base):
+    """Single-row table: the firm-wide risk gate thresholds and the kill switch."""
+
+    __tablename__ = "risk_settings"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    max_position_pct: Mapped[float] = mapped_column(Float, default=10.0)   # % of NAV per line
+    max_sector_pct: Mapped[float] = mapped_column(Float, default=25.0)     # % of NAV per sector
+    max_drawdown_pct: Mapped[float] = mapped_column(Float, default=15.0)   # freeze new trades beyond
+    stop_loss_pct: Mapped[float] = mapped_column(Float, default=12.0)      # default invalidation level
+    kill_switch: Mapped[bool] = mapped_column(Boolean, default=False)      # emergency stop

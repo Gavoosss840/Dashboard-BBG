@@ -17,6 +17,7 @@ import { api } from "../api/client";
 import type { SecurityChart, SecurityFundamentals, SecurityOverview, SecurityQuote } from "../api/types";
 import { Card } from "../components/ui/Card";
 import { LoadingState, ErrorState } from "../components/ui/States";
+import { ValuationCard } from "../components/ValuationCard";
 import { formatNumber, formatPct } from "../lib/format";
 
 const QUOTE_POLL_MS = 15_000;
@@ -472,6 +473,13 @@ export function SecurityPage() {
             Rafraîchi toutes les 15 s · données Yahoo Finance (certaines places différées)
           </div>
         </div>
+        <div className="flex items-center gap-2">
+        <Link
+          to={`/research/${encodeURIComponent(quote.symbol)}`}
+          className="rounded border border-white/15 px-3 py-1.5 text-sm text-[var(--text-secondary)] hover:bg-white/5"
+        >
+          Recherche Equity →
+        </Link>
         <button
           onClick={toggleWatchlist}
           disabled={watchBusy}
@@ -483,6 +491,7 @@ export function SecurityPage() {
         >
           {overview.in_watchlist ? "★ Retirer de la watchlist" : "☆ Ajouter à la watchlist"}
         </button>
+        </div>
       </div>
 
       {/* ---- Day stats strip ---- */}
@@ -621,6 +630,9 @@ export function SecurityPage() {
           </ResponsiveContainer>
         )}
       </Card>
+
+      {/* ---- Valuation verdict ---- */}
+      {overview.valuation && <ValuationCard valuation={overview.valuation} currency={quote.currency} />}
 
       {/* ---- Ratios ---- */}
       {f && <RatiosCard f={f} currency={quote.currency} />}

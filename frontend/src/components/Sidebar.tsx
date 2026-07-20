@@ -26,6 +26,7 @@ const SECTIONS: { label: string; items: { to: string; label: string; adminOnly?:
     label: "Marché",
     items: [
       { to: "/markets", label: "Marchés" },
+      { to: "/research", label: "Recherche Equity" },
       { to: "/market", label: "Watchlist & News" },
       { to: "/earnings", label: "Earnings" },
     ],
