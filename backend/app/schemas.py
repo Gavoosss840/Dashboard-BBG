@@ -426,6 +426,7 @@ class SyncLogOut(ORMBase):
 
 class SyncStatusOut(BaseModel):
     ibkr_configured: bool
+    ibkr_connections: int = 0
     last_ibkr_sync: SyncLogOut | None = None
     last_market_refresh: SyncLogOut | None = None
     last_backup: SyncLogOut | None = None

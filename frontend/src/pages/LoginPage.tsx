@@ -48,7 +48,7 @@ export function LoginPage() {
     <div className="flex h-screen w-screen items-center justify-center bg-[var(--surface-0)] text-[var(--text-primary)]">
       <div className="w-full max-w-sm rounded-lg border border-white/10 bg-[var(--surface-1)] p-6">
         <div className="mb-6 text-center">
-          <div className="text-lg font-bold tracking-wide">BOULET CAPITAL</div>
+          <div className="text-lg font-bold tracking-wide">B. HORIZON CAPITAL</div>
           <div className="text-xs text-[var(--text-muted)]">
             {needsBootstrap ? "Créer le compte administrateur" : "Internal Terminal"}
           </div>

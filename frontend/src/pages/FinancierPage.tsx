@@ -76,7 +76,7 @@ export function FinancierPage() {
 
   return (
     <div>
-      <PageHeader title="Financier" subtitle="Tracker des transactions et frais entre Boulet Capital et ses clients" />
+      <PageHeader title="Financier" subtitle="Tracker des transactions et frais entre B. Horizon Capital et ses clients" />
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
         <StatTile label="Fees en attente" value={formatMoney(summary.data.pending, currency, { compact: true })} />

@@ -16,7 +16,7 @@ from app.database import Base
 
 
 class User(Base):
-    """Associates / staff of Boulet Capital."""
+    """Associates / staff of B. Horizon Capital."""
 
     __tablename__ = "users"
 
@@ -141,7 +141,7 @@ class CashFlow(Base):
 
 
 class Transaction(Base):
-    """Fee / invoice tracker between Boulet Capital and its clients."""
+    """Fee / invoice tracker between B. Horizon Capital and its clients."""
 
     __tablename__ = "transactions"
 

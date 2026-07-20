@@ -21,6 +21,7 @@ def _last_log(db: Session, kind: str) -> models.SyncLog | None:
 def sync_status(db: Session = Depends(get_db)):
     return schemas.SyncStatusOut(
         ibkr_configured=ibkr.is_configured(),
+        ibkr_connections=len(ibkr.flex_connections()),
         last_ibkr_sync=_last_log(db, "ibkr"),
         last_market_refresh=_last_log(db, "market_data"),
         last_backup=_last_log(db, "backup"),

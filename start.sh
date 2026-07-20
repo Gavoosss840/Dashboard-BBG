@@ -4,7 +4,7 @@
 cd "$(dirname "$0")"
 
 echo "============================================"
-echo "  Boulet Capital - Internal Terminal"
+echo "  B. Horizon Capital - Internal Terminal"
 echo "============================================"
 echo ""
 

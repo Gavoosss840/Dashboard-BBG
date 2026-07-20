@@ -101,7 +101,7 @@ export function DataSyncPage() {
             />
             <span className="text-[var(--text-secondary)]">
               {data.ibkr_configured
-                ? "Token Flex configuré — la synchro tourne automatiquement au démarrage (si plus de 12h ont passé)."
+                ? `${data.ibkr_connections} connexion(s) IBKR configurée(s) — la synchro tourne automatiquement au démarrage (si plus de 12h ont passé).`
                 : "Non configuré : renseignez IBKR_FLEX_TOKEN et IBKR_FLEX_QUERY_ID dans docker-compose.yml (voir guide ci-dessous)."}
             </span>
           </div>
@@ -177,13 +177,29 @@ export function DataSyncPage() {
             </pre>
             ⚠ Le token reste sur ta machine — ne le partage jamais (ni par email, ni dans un chat).
           </li>
+          <li className="rounded border border-[var(--series-1)]/25 bg-[var(--series-1)]/[0.05] p-3">
+            <strong>Plusieurs logins IBKR (ex : un login par client) ?</strong> Ajoute une paire{" "}
+            <strong>numérotée</strong> par login supplémentaire — la synchro les traite toutes et agrège les résultats :
+            <pre className="mt-2 overflow-x-auto rounded bg-black/40 p-3 text-xs">
+              {`environment:
+  - IBKR_FLEX_TOKEN_1=token_client_A
+  - IBKR_FLEX_QUERY_ID_1=query_client_A
+  - IBKR_FLEX_TOKEN_2=token_client_B
+  - IBKR_FLEX_QUERY_ID_2=query_client_B`}
+            </pre>
+            Si tes comptes sont au contraire sous un <em>seul</em> login (compte advisor/master avec sous-comptes),
+            une seule paire suffit — une Flex Query peut couvrir plusieurs comptes.
+          </li>
           <li>
             Redémarre la plateforme (icône <em>Arrêter</em> puis <em>Démarrer</em>), reviens ici et clique{" "}
             <strong>Synchroniser maintenant</strong>.
           </li>
           <li>
-            Chaque compte IBKR (U1234567…) doit correspondre à un portefeuille dont l'<strong>ID Portefeuille</strong> est
-            exactement cet identifiant — la synchro te signale les comptes sans portefeuille correspondant.
+            <strong>Rattachement portefeuille ↔ compte IBKR.</strong> Chaque compte IBKR (U1234567…) doit correspondre à
+            un portefeuille dont l'<strong>ID Portefeuille</strong> est exactement cet identifiant. Concrètement : quand
+            tu ajoutes un portefeuille à un client, mets son numéro de compte IBKR dans « ID Portefeuille » — il se
+            synchronisera automatiquement. Un client peut avoir plusieurs portefeuilles/comptes. La synchro te signale
+            tout compte IBKR sans portefeuille correspondant.
           </li>
         </ol>
       </Card>

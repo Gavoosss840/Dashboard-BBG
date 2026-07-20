@@ -15,11 +15,20 @@ services:
       # au premier démarrage et stockée dans le volume. Décommente uniquement
       # pour imposer ta propre clé :
       # - AUTH_SECRET_KEY=
-      # Connexion Interactive Brokers (Flex Web Service) — voir la page
+      # Connexions Interactive Brokers (Flex Web Service) — voir la page
       # "Données & Synchro" de la plateforme pour le guide pas-à-pas.
       # Ces valeurs restent sur TA machine, ne les partage jamais.
+      #
+      # UN SEUL login IBKR (plusieurs comptes sous ce login = une seule query) :
       # - IBKR_FLEX_TOKEN=
       # - IBKR_FLEX_QUERY_ID=
+      #
+      # PLUSIEURS logins IBKR (ex: un login par client) → une paire numérotée
+      # par login. Ajoute autant de paires que nécessaire (_1, _2, _3, …) :
+      # - IBKR_FLEX_TOKEN_1=
+      # - IBKR_FLEX_QUERY_ID_1=
+      # - IBKR_FLEX_TOKEN_2=
+      # - IBKR_FLEX_QUERY_ID_2=
       # - SEED_DEMO_DATA=true
 
   frontend:

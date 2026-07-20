@@ -72,7 +72,7 @@ def _scheduler_loop() -> None:
 
 threading.Thread(target=_scheduler_loop, daemon=True).start()
 
-app = FastAPI(title="Boulet Capital - Internal Terminal", version="0.1.0")
+app = FastAPI(title="B. Horizon Capital - Internal Terminal", version="0.1.0")
 
 PUBLIC_API_PATHS = {
     "/api/health",

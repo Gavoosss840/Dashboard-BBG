@@ -42,7 +42,7 @@ export function UsersPage() {
     <div>
       <PageHeader
         title="Users"
-        subtitle="Fondateur et associés de Boulet Capital"
+        subtitle="Fondateur et associés de B. Horizon Capital"
         action={
           <button
             onClick={() => setModal({ type: "new" })}

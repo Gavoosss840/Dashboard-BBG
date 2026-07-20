@@ -433,6 +433,7 @@ export interface SyncLog {
 
 export interface SyncStatus {
   ibkr_configured: boolean;
+  ibkr_connections: number;
   last_ibkr_sync: SyncLog | null;
   last_market_refresh: SyncLog | null;
   last_backup: SyncLog | null;

@@ -1,4 +1,4 @@
-"""Data seeding for Boulet Capital's internal terminal.
+"""Data seeding for B. Horizon Capital's internal terminal.
 
 By default the platform starts EMPTY (no clients, no AUM, no fake track
 record) — only structural configuration is seeded: FX rates (needed for
@@ -115,7 +115,7 @@ def _seed_demo_data(db: Session) -> None:
             phone="+33 6 00 00 00 01",
             avatar_initials="HB",
             joined_date=dt.date(2022, 1, 1),
-            bio="Fondateur de Boulet Capital. Gestion discrétionnaire actions + arbitrage algorithmique.",
+            bio="Fondateur de B. Horizon Capital. Gestion discrétionnaire actions + arbitrage algorithmique.",
         ),
         models.User(
             name="Claire Fontaine",

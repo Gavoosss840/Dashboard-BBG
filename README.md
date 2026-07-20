@@ -1,4 +1,4 @@
-# Boulet Capital — Internal Terminal
+# B. Horizon Capital — Internal Terminal
 
 Terminal interne ("Bloomberg maison") pour la gestion de mandats individuels,
 avant transition vers un fonds structuré. Backend FastAPI + frontend React.
@@ -79,8 +79,8 @@ Pour avoir une icône directement sur le Bureau (comme une vraie application) :
 double-clique une fois sur **`Installer les raccourcis Bureau.bat`** à la
 racine du repo. Ça crée deux raccourcis sur ton Bureau Windows :
 
-- **Boulet Capital - Demarrer**
-- **Boulet Capital - Arreter**
+- **B. Horizon Capital - Demarrer**
+- **B. Horizon Capital - Arreter**
 
 Ensuite tu n'as plus jamais besoin d'ouvrir le dossier : tout se pilote depuis
 ces deux icônes.

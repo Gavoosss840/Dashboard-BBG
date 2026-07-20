@@ -53,7 +53,7 @@ export function Sidebar() {
   return (
     <aside className="flex h-full w-56 shrink-0 flex-col border-r border-white/10 bg-[var(--surface-1)]">
       <div className="border-b border-white/10 px-4 py-4">
-        <div className="text-sm font-bold tracking-wide">BOULET CAPITAL</div>
+        <div className="text-sm font-bold tracking-wide">B. HORIZON CAPITAL</div>
         <div className="text-xs text-[var(--text-muted)]">Internal Terminal</div>
       </div>
       <nav className="flex-1 overflow-y-auto px-2 py-3">

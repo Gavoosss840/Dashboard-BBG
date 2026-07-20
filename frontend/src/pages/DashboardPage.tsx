@@ -21,7 +21,7 @@ export function DashboardPage() {
 
   return (
     <div>
-      <PageHeader title="Dashboard Overview" subtitle={`Boulet Capital · au ${data.as_of}`} />
+      <PageHeader title="Dashboard Overview" subtitle={`B. Horizon Capital · au ${data.as_of}`} />
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <StatTile label="AUM Total" value={formatMoney(data.total_aum, currency, { compact: true })} sub={`${data.num_clients} clients actifs`} />

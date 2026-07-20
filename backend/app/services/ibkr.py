@@ -37,12 +37,34 @@ FLEX_GET_URL = "https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebS
 
 
 def flex_config() -> tuple[str | None, str | None]:
+    """Legacy single-connection pair (kept for backward compatibility)."""
     return os.environ.get("IBKR_FLEX_TOKEN") or None, os.environ.get("IBKR_FLEX_QUERY_ID") or None
 
 
-def is_configured() -> bool:
+def flex_connections() -> list[tuple[str, str, str]]:
+    """All configured IBKR Flex connections as (label, token, query_id).
+
+    Two clients on two separate IBKR logins need two tokens, so we read:
+      - the legacy pair IBKR_FLEX_TOKEN / IBKR_FLEX_QUERY_ID, and
+      - numbered pairs IBKR_FLEX_TOKEN_1..N / IBKR_FLEX_QUERY_ID_1..N.
+    Tokens live only in the environment (docker-compose.yml on the user's
+    machine) — never in the database, so they never reach a backup.
+    """
+    conns: list[tuple[str, str, str]] = []
     token, query_id = flex_config()
-    return bool(token and query_id)
+    if token and query_id:
+        conns.append(("principal", token, query_id))
+    # Numbered connections; stop at the first gap after a reasonable range.
+    for i in range(1, 21):
+        t = os.environ.get(f"IBKR_FLEX_TOKEN_{i}")
+        q = os.environ.get(f"IBKR_FLEX_QUERY_ID_{i}")
+        if t and q:
+            conns.append((f"connexion {i}", t, q))
+    return conns
+
+
+def is_configured() -> bool:
+    return len(flex_connections()) > 0
 
 
 class FlexError(Exception):
@@ -266,28 +288,51 @@ def run_sync(db: Session) -> models.SyncLog:
     db.add(log)
     db.commit()
 
-    token, query_id = flex_config()
+    connections = flex_connections()
     try:
-        if not token or not query_id:
+        if not connections:
             raise FlexError(
-                "IBKR non configuré : renseignez IBKR_FLEX_TOKEN et IBKR_FLEX_QUERY_ID "
+                "IBKR non configuré : renseignez IBKR_FLEX_TOKEN(_1) et IBKR_FLEX_QUERY_ID(_1) "
                 "dans docker-compose.yml puis redémarrez."
             )
-        xml_text = fetch_flex_statement(token, query_id)
-        stats = import_flex(xml_text, db)
-        matched = ", ".join(stats["accounts_matched"]) or "aucun"
-        message = (
-            f"Comptes synchronisés: {matched}. "
-            f"{stats['positions']} positions, {stats['trades_new']} nouveaux trades, "
-            f"{stats['cash_flows_new']} mouvements de cash, {stats['nav_points']} points de NAV."
-        )
-        if stats["accounts_unmatched"]:
-            message += (
-                f" ⚠ Comptes IBKR sans portefeuille correspondant: {', '.join(stats['accounts_unmatched'])} "
-                f"— créez un portefeuille avec cet ID (champ 'ID Portefeuille') pour les importer."
+
+        totals = {"positions": 0, "trades_new": 0, "cash_flows_new": 0, "nav_points": 0}
+        matched: list[str] = []
+        unmatched: list[str] = []
+        errors: list[str] = []
+
+        for label, token, query_id in connections:
+            try:
+                xml_text = fetch_flex_statement(token, query_id)
+                stats = import_flex(xml_text, db)
+                for k in totals:
+                    totals[k] += stats[k]
+                matched.extend(stats["accounts_matched"])
+                unmatched.extend(a for a in stats["accounts_unmatched"] if a not in unmatched)
+            except Exception as exc:
+                # one failing connection must not abort the others
+                errors.append(f"{label}: {exc}")
+
+        if matched or totals["positions"] or not errors:
+            matched_str = ", ".join(matched) or "aucun"
+            message = (
+                f"{len(connections)} connexion(s) IBKR. Comptes synchronisés: {matched_str}. "
+                f"{totals['positions']} positions, {totals['trades_new']} nouveaux trades, "
+                f"{totals['cash_flows_new']} mouvements de cash, {totals['nav_points']} points de NAV."
             )
-        log.status = "success"
-        log.message = message
+            if unmatched:
+                message += (
+                    f" ⚠ Comptes IBKR sans portefeuille correspondant: {', '.join(unmatched)} "
+                    f"— créez un portefeuille avec cet ID (champ 'ID Portefeuille') pour les importer."
+                )
+            if errors:
+                message += " ⚠ Connexions en échec — " + " ; ".join(errors)
+            log.status = "success" if matched or totals["positions"] else "error"
+            log.message = message
+        else:
+            # every connection failed
+            log.status = "error"
+            log.message = "Échec de toutes les connexions IBKR — " + " ; ".join(errors)
     except Exception as exc:  # keep the log row even on failure
         log.status = "error"
         log.message = str(exc)
