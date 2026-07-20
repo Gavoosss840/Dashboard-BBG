@@ -31,7 +31,7 @@ from app.routers import (
     users,
 )
 from app.seed_data import seed
-from app.services import backup, ibkr, market_data
+from app.services import backup, ibkr, market_data, recurring
 
 Base.metadata.create_all(bind=engine)
 ensure_schema(engine, Base)
@@ -67,6 +67,15 @@ def _scheduler_loop() -> None:
                         runner(db)
             except Exception:
                 pass  # each run is individually logged in SyncLog
+
+        # DCA-style recurring contributions: self-idempotent per calendar
+        # month (last_generated_month), so it's safe to check every tick.
+        try:
+            with SessionLocal() as db:
+                recurring.run_due_contributions(db)
+        except Exception:
+            pass
+
         time.sleep(30 * 60)
 
 

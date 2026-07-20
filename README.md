@@ -146,8 +146,9 @@ SEED_DEMO_DATA=true uvicorn app.main:app --reload --port 8000
 Tout se crée, modifie et supprime depuis l'interface :
 
 - **Clients** (`/clients`) : créer/modifier/supprimer un client, ses mandats,
-  ses portefeuilles, ses positions et ses dépôts/retraits — directement depuis
-  la fiche client.
+  ses portefeuilles, ses positions, ses dépôts/retraits (liste éditable avec
+  modifier/supprimer par ligne) et ses **contributions récurrentes (DCA)** —
+  directement depuis la fiche client.
 - **CRM** (`/crm`) : créer/modifier/supprimer un contact (tous les champs, pas
   seulement l'étape du pipeline).
 - **Users** (`/users`) : créer/modifier/supprimer un associé.
@@ -343,6 +344,16 @@ doit correspondre à l'« ID Portefeuille » d'un portefeuille de la plateforme)
 - **NAV officielle** par jour → historique de NAV (base du calcul TWR)
 - **Cash par devise** → soldes de trésorerie du portefeuille
 
+Tout est **automatique dès que le portefeuille est rattaché** (voir plus
+haut) : ajouter un portefeuille avec le bon « ID Portefeuille » suffit — la
+prochaine synchro (auto ou manuelle) importe positions, NAV, dépôts/retraits
+et cash pour ce compte, sans autre configuration par client.
+
+**Plusieurs logins IBKR** (ex : un login séparé par client) : ajouter une
+paire `IBKR_FLEX_TOKEN_N` / `IBKR_FLEX_QUERY_ID_N` par login (voir le guide
+sur la page Données & Synchro). Une seule paire suffit si tous les comptes
+sont visibles sous un seul login (compte advisor/master).
+
 Configuration : suivre le guide pas-à-pas de la page **Données & Synchro**
 de la plateforme, puis renseigner `IBKR_FLEX_TOKEN` et `IBKR_FLEX_QUERY_ID`
 dans `docker-compose.yml`. Le token ne quitte jamais ta machine. La synchro
@@ -350,6 +361,25 @@ tourne automatiquement au démarrage (si la dernière date de plus de 12h) et
 à la demande depuis la page. Pour la **première** synchro, configurer la
 Flex Query sur *Last 365 Calendar Days* pour rattraper l'historique de
 l'année, puis repasser sur *Last Business Day*.
+
+> ⚠ La déduplication des dépôts/retraits importés se fait sur le **contenu**
+> (date + montant + devise + type), pas sur un identifiant stable. Modifier
+> ou supprimer un mouvement **saisi manuellement** est permanent. Modifier ou
+> supprimer un mouvement **importé depuis IBKR** peut le faire réapparaître
+> à la prochaine synchro, puisque la ligne d'origine ne sera plus trouvée et
+> sera réimportée telle quelle.
+
+## Contributions récurrentes (DCA)
+
+Pour les clients qui versent un montant fixe chaque mois : sur la fiche
+client, carte **« Contributions récurrentes (DCA) »**, définir un montant,
+un jour du mois (1-28, pour rester valide tous les mois) et une date de
+début. La plateforme génère automatiquement le dépôt (ou retrait) correspondant
+dès que la date est atteinte — avec les mêmes frais d'entrée/sortie du mandat
+actif qu'un dépôt manuel — sans doublon même si la vérification tourne
+plusieurs fois dans le mois (`backend/app/services/recurring.py`). On peut
+suspendre/réactiver, modifier ou supprimer une récurrence à tout moment ;
+la prochaine échéance est affichée dans la liste.
 
 ## Données de marché (gratuit)
 

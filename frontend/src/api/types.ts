@@ -47,6 +47,31 @@ export interface CashFlowInput {
   currency: string;
 }
 
+export interface RecurringContribution {
+  id: number;
+  client_id: number;
+  flow_type: string;
+  amount: number;
+  currency: string;
+  day_of_month: number;
+  label: string;
+  active: boolean;
+  start_date: string;
+  end_date: string | null;
+  last_generated_month: string | null;
+}
+
+export interface RecurringContributionInput {
+  flow_type: string;
+  amount: number;
+  currency: string;
+  day_of_month: number;
+  label: string;
+  active: boolean;
+  start_date: string;
+  end_date: string | null;
+}
+
 export interface AumTarget {
   id: number;
   label: string;

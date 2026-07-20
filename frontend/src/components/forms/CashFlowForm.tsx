@@ -1,22 +1,24 @@
 import { useState } from "react";
-import type { CashFlowInput } from "../../api/types";
+import type { CashFlow, CashFlowInput } from "../../api/types";
 import { Field, FormGrid, FormActions, inputClass } from "../ui/form";
 import { SUPPORTED_CURRENCIES } from "../../context/CurrencyContext";
 
 export function CashFlowForm({
   defaultCurrency,
+  initial,
   onSubmit,
   onCancel,
 }: {
   defaultCurrency: string;
+  initial?: CashFlow;
   onSubmit: (data: CashFlowInput) => Promise<void>;
   onCancel: () => void;
 }) {
   const [form, setForm] = useState<CashFlowInput>({
-    date: new Date().toISOString().slice(0, 10),
-    flow_type: "deposit",
-    amount: 0,
-    currency: defaultCurrency,
+    date: initial?.date ?? new Date().toISOString().slice(0, 10),
+    flow_type: initial?.flow_type ?? "deposit",
+    amount: initial?.amount ?? 0,
+    currency: initial?.currency ?? defaultCurrency,
   });
   const [busy, setBusy] = useState(false);
 

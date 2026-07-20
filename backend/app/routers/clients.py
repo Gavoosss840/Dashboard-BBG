@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, joinedload
 from app import models, schemas
 from app.database import get_db
 from app.deps import fx_rates, target_currency
+from app.services import cashflow as cashflow_service
 from app.services import pnl
 from app.utils import today
 
@@ -127,35 +128,103 @@ def create_cash_flow(client_id: int, body: schemas.CashFlowCreate, db: Session =
     if body.flow_type not in ("deposit", "withdrawal"):
         raise HTTPException(status_code=400, detail="flow_type must be 'deposit' or 'withdrawal'")
 
-    cash_flow = models.CashFlow(
-        client_id=client_id, date=body.date, flow_type=body.flow_type,
-        amount=body.amount, currency=body.currency,
+    cash_flow = cashflow_service.create_cash_flow(
+        db, client_id, body.flow_type, body.amount, body.currency, body.date,
     )
-    db.add(cash_flow)
-
-    # Auto-generate the entry/exit fee transaction from the active mandate's rate, if any.
-    mandate = (
-        db.query(models.Mandate)
-        .filter(models.Mandate.client_id == client_id, models.Mandate.status == "active")
-        .first()
-    )
-    if mandate:
-        rate = mandate.entry_fee_pct if body.flow_type == "deposit" else mandate.exit_fee_pct
-        if rate > 0:
-            fee_amount = round(body.amount * rate / 100, 2)
-            fee_type = "entry_fee" if body.flow_type == "deposit" else "exit_fee"
-            label = "d'entrée" if body.flow_type == "deposit" else "de sortie"
-            db.add(models.Transaction(
-                client_id=client_id, transaction_type=fee_type, amount=fee_amount,
-                currency=body.currency, status="draft", issue_date=body.date,
-                due_date=body.date + dt.timedelta(days=30),
-                invoice_ref=f"INV-{fee_type.upper().replace('_', '-')}-{client_id:04d}-{body.date.strftime('%Y%m%d')}",
-                description=f"Frais {label} — {rate}% sur {body.amount:,.2f} {body.currency}",
-            ))
-
     db.commit()
     db.refresh(cash_flow)
     return cash_flow
+
+
+@router.get("/{client_id}/cashflows", response_model=list[schemas.CashFlowOut])
+def list_cash_flows(client_id: int, db: Session = Depends(get_db)):
+    return (
+        db.query(models.CashFlow)
+        .filter(models.CashFlow.client_id == client_id)
+        .order_by(models.CashFlow.date.desc(), models.CashFlow.id.desc())
+        .all()
+    )
+
+
+@router.patch("/cashflows/{cashflow_id}", response_model=schemas.CashFlowOut)
+def update_cash_flow(cashflow_id: int, body: schemas.CashFlowUpdate, db: Session = Depends(get_db)):
+    row = db.query(models.CashFlow).filter(models.CashFlow.id == cashflow_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Cash flow not found")
+    updates = body.model_dump(exclude_unset=True)
+    if "flow_type" in updates and updates["flow_type"] not in ("deposit", "withdrawal"):
+        raise HTTPException(status_code=400, detail="flow_type must be 'deposit' or 'withdrawal'")
+    for field, value in updates.items():
+        setattr(row, field, value)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@router.delete("/cashflows/{cashflow_id}")
+def delete_cash_flow(cashflow_id: int, db: Session = Depends(get_db)):
+    row = db.query(models.CashFlow).filter(models.CashFlow.id == cashflow_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Cash flow not found")
+    db.delete(row)
+    db.commit()
+    return {"ok": True}
+
+
+@router.get("/{client_id}/recurring-contributions", response_model=list[schemas.RecurringContributionOut])
+def list_recurring_contributions(client_id: int, db: Session = Depends(get_db)):
+    return (
+        db.query(models.RecurringContribution)
+        .filter(models.RecurringContribution.client_id == client_id)
+        .order_by(models.RecurringContribution.id)
+        .all()
+    )
+
+
+@router.post("/{client_id}/recurring-contributions", response_model=schemas.RecurringContributionOut)
+def create_recurring_contribution(
+    client_id: int, body: schemas.RecurringContributionCreate, db: Session = Depends(get_db)
+):
+    client = db.query(models.Client).filter(models.Client.id == client_id).first()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    if body.flow_type not in ("deposit", "withdrawal"):
+        raise HTTPException(status_code=400, detail="flow_type must be 'deposit' or 'withdrawal'")
+    if not 1 <= body.day_of_month <= 28:
+        raise HTTPException(status_code=400, detail="day_of_month doit être entre 1 et 28 (compatible tous les mois)")
+
+    row = models.RecurringContribution(client_id=client_id, **body.model_dump())
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@router.patch("/recurring-contributions/{recurring_id}", response_model=schemas.RecurringContributionOut)
+def update_recurring_contribution(
+    recurring_id: int, body: schemas.RecurringContributionUpdate, db: Session = Depends(get_db)
+):
+    row = db.query(models.RecurringContribution).filter(models.RecurringContribution.id == recurring_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Recurring contribution not found")
+    updates = body.model_dump(exclude_unset=True)
+    if "day_of_month" in updates and not 1 <= updates["day_of_month"] <= 28:
+        raise HTTPException(status_code=400, detail="day_of_month doit être entre 1 et 28 (compatible tous les mois)")
+    for field, value in updates.items():
+        setattr(row, field, value)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@router.delete("/recurring-contributions/{recurring_id}")
+def delete_recurring_contribution(recurring_id: int, db: Session = Depends(get_db)):
+    row = db.query(models.RecurringContribution).filter(models.RecurringContribution.id == recurring_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Recurring contribution not found")
+    db.delete(row)
+    db.commit()
+    return {"ok": True}
 
 
 @router.delete("/{client_id}")

@@ -18,8 +18,10 @@ import { MandateForm } from "../components/forms/MandateForm";
 import { PortfolioForm } from "../components/forms/PortfolioForm";
 import { PositionForm } from "../components/forms/PositionForm";
 import { CashFlowForm } from "../components/forms/CashFlowForm";
+import { RecurringContributionForm } from "../components/forms/RecurringContributionForm";
 import { formatDate, formatMoney, formatNumber, formatPct } from "../lib/format";
 import type {
+  CashFlow,
   CashFlowInput,
   ClientInput,
   Mandate,
@@ -28,6 +30,8 @@ import type {
   PortfolioInput,
   Position,
   PositionInput,
+  RecurringContribution,
+  RecurringContributionInput,
 } from "../api/types";
 
 type ModalState =
@@ -39,6 +43,9 @@ type ModalState =
   | { type: "newPosition"; portfolioId: number }
   | { type: "editPosition"; position: Position }
   | { type: "newCashFlow" }
+  | { type: "editCashFlow"; flow: CashFlow }
+  | { type: "newRecurring" }
+  | { type: "editRecurring"; recurring: RecurringContribution }
   | null;
 
 export function ClientDetailPage() {
@@ -47,6 +54,8 @@ export function ClientDetailPage() {
   const clientId = Number(id);
   const { data, loading, error, reload } = useApi(() => api.client(clientId, currency), [clientId, currency]);
   const users = useApi(() => api.users(), []);
+  const cashFlows = useApi(() => api.cashFlows(clientId), [clientId]);
+  const recurring = useApi(() => api.recurringContributions(clientId), [clientId]);
   const [modal, setModal] = useState<ModalState>(null);
   const navigate = useNavigate();
 
@@ -131,9 +140,40 @@ export function ClientDetailPage() {
   }
 
   async function handleCashFlowSubmit(payload: CashFlowInput) {
-    await api.createCashFlow(clientId, payload);
+    if (modal?.type === "editCashFlow") {
+      await api.updateCashFlow(modal.flow.id, payload);
+    } else {
+      await api.createCashFlow(clientId, payload);
+    }
     setModal(null);
     reload();
+    cashFlows.reload();
+  }
+
+  async function handleDeleteCashFlow(id: number) {
+    await api.deleteCashFlow(id);
+    reload();
+    cashFlows.reload();
+  }
+
+  async function handleRecurringSubmit(payload: RecurringContributionInput) {
+    if (modal?.type === "editRecurring") {
+      await api.updateRecurringContribution(modal.recurring.id, payload);
+    } else {
+      await api.createRecurringContribution(clientId, payload);
+    }
+    setModal(null);
+    recurring.reload();
+  }
+
+  async function handleDeleteRecurring(id: number) {
+    await api.deleteRecurringContribution(id);
+    recurring.reload();
+  }
+
+  async function handleToggleRecurringActive(row: RecurringContribution) {
+    await api.updateRecurringContribution(row.id, { active: !row.active });
+    recurring.reload();
   }
 
   if (loading) return <LoadingState />;
@@ -279,6 +319,137 @@ export function ClientDetailPage() {
                         <button
                           onClick={() => {
                             if (window.confirm("Supprimer ce mandat ?")) handleDeleteMandate(m.id);
+                          }}
+                          className="text-xs text-[var(--text-muted)] hover:text-[var(--status-critical)]"
+                        >
+                          supprimer
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </Card>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card
+          title="Dépôts & Retraits"
+          action={
+            <button
+              onClick={() => setModal({ type: "newCashFlow" })}
+              className="rounded border border-white/10 px-2 py-1 text-xs text-[var(--text-secondary)] hover:border-[var(--series-1)] hover:text-[var(--series-1)]"
+            >
+              + Dépôt / Retrait
+            </button>
+          }
+        >
+          {!cashFlows.data || cashFlows.data.length === 0 ? (
+            <div className="text-sm text-[var(--text-muted)]">Aucun mouvement enregistré.</div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs uppercase text-[var(--text-muted)]">
+                  <th className="pb-2">Date</th>
+                  <th className="pb-2">Type</th>
+                  <th className="pb-2 text-right">Montant</th>
+                  <th className="pb-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {cashFlows.data.map((f) => (
+                  <tr key={f.id} className="border-t border-white/5">
+                    <td className="py-2 text-[var(--text-secondary)]">{formatDate(f.date)}</td>
+                    <td className="py-2">
+                      <span style={{ color: f.flow_type === "deposit" ? "var(--status-good)" : "var(--status-critical)" }}>
+                        {f.flow_type === "deposit" ? "Dépôt" : "Retrait"}
+                      </span>
+                    </td>
+                    <td className="tabular py-2 text-right">{formatMoney(f.amount, f.currency)}</td>
+                    <td className="py-2 text-right">
+                      <div className="flex justify-end gap-2">
+                        <button
+                          onClick={() => setModal({ type: "editCashFlow", flow: f })}
+                          className="text-xs text-[var(--text-muted)] hover:text-[var(--series-1)]"
+                        >
+                          modifier
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (window.confirm("Supprimer ce mouvement ?")) handleDeleteCashFlow(f.id);
+                          }}
+                          className="text-xs text-[var(--text-muted)] hover:text-[var(--status-critical)]"
+                        >
+                          supprimer
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </Card>
+
+        <Card
+          title="Contributions récurrentes (DCA)"
+          action={
+            <button
+              onClick={() => setModal({ type: "newRecurring" })}
+              className="rounded border border-white/10 px-2 py-1 text-xs text-[var(--text-secondary)] hover:border-[var(--series-1)] hover:text-[var(--series-1)]"
+            >
+              + Récurrence
+            </button>
+          }
+        >
+          {!recurring.data || recurring.data.length === 0 ? (
+            <div className="text-sm text-[var(--text-muted)]">
+              Aucune contribution récurrente. Utile pour les clients en DCA (versement automatique chaque mois).
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs uppercase text-[var(--text-muted)]">
+                  <th className="pb-2">Libellé</th>
+                  <th className="pb-2 text-right">Montant</th>
+                  <th className="pb-2">Jour</th>
+                  <th className="pb-2">Prochaine échéance</th>
+                  <th className="pb-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {recurring.data.map((r) => (
+                  <tr key={r.id} className="border-t border-white/5">
+                    <td className="py-2">
+                      {r.label || (r.flow_type === "deposit" ? "Dépôt récurrent" : "Retrait récurrent")}
+                      {!r.active && <span className="ml-2 text-xs text-[var(--text-muted)]">(suspendue)</span>}
+                    </td>
+                    <td className="tabular py-2 text-right">
+                      <span style={{ color: r.flow_type === "deposit" ? "var(--status-good)" : "var(--status-critical)" }}>
+                        {formatMoney(r.amount, r.currency)}
+                      </span>
+                    </td>
+                    <td className="py-2 text-[var(--text-secondary)]">le {r.day_of_month}</td>
+                    <td className="py-2 text-[var(--text-secondary)]">{nextDueLabel(r)}</td>
+                    <td className="py-2 text-right">
+                      <div className="flex justify-end gap-2">
+                        <button
+                          onClick={() => handleToggleRecurringActive(r)}
+                          className="text-xs text-[var(--text-muted)] hover:text-[var(--series-1)]"
+                        >
+                          {r.active ? "suspendre" : "réactiver"}
+                        </button>
+                        <button
+                          onClick={() => setModal({ type: "editRecurring", recurring: r })}
+                          className="text-xs text-[var(--text-muted)] hover:text-[var(--series-1)]"
+                        >
+                          modifier
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (window.confirm("Supprimer cette contribution récurrente ?")) handleDeleteRecurring(r.id);
                           }}
                           className="text-xs text-[var(--text-muted)] hover:text-[var(--status-critical)]"
                         >
@@ -459,11 +630,55 @@ export function ClientDetailPage() {
         />
       </Modal>
 
-      <Modal open={modal?.type === "newCashFlow"} onClose={() => setModal(null)} title="Dépôt / Retrait">
-        <CashFlowForm defaultCurrency={data.base_currency} onSubmit={handleCashFlowSubmit} onCancel={() => setModal(null)} />
+      <Modal
+        open={modal?.type === "newCashFlow" || modal?.type === "editCashFlow"}
+        onClose={() => setModal(null)}
+        title={modal?.type === "editCashFlow" ? "Modifier le mouvement" : "Dépôt / Retrait"}
+      >
+        <CashFlowForm
+          defaultCurrency={data.base_currency}
+          initial={modal?.type === "editCashFlow" ? modal.flow : undefined}
+          onSubmit={handleCashFlowSubmit}
+          onCancel={() => setModal(null)}
+        />
+      </Modal>
+
+      <Modal
+        open={modal?.type === "newRecurring" || modal?.type === "editRecurring"}
+        onClose={() => setModal(null)}
+        title={modal?.type === "editRecurring" ? "Modifier la contribution récurrente" : "Nouvelle contribution récurrente"}
+        wide
+      >
+        <RecurringContributionForm
+          defaultCurrency={data.base_currency}
+          initial={modal?.type === "editRecurring" ? modal.recurring : undefined}
+          onSubmit={handleRecurringSubmit}
+          onCancel={() => setModal(null)}
+        />
       </Modal>
     </div>
   );
+}
+
+function nextDueLabel(row: RecurringContribution): string {
+  if (!row.active) return "—";
+  const today = new Date();
+  if (row.end_date && new Date(row.end_date) < today) return "Terminée";
+
+  const ym = today.toISOString().slice(0, 7);
+  let year = today.getFullYear();
+  let month = today.getMonth(); // 0-indexed
+  const alreadyFiredThisMonth = row.last_generated_month === ym;
+  const dayAlreadyPassed = today.getDate() > row.day_of_month;
+  if (alreadyFiredThisMonth || dayAlreadyPassed) {
+    month += 1;
+    if (month > 11) {
+      month = 0;
+      year += 1;
+    }
+  }
+  const due = new Date(year, month, row.day_of_month);
+  return formatDate(due.toISOString().slice(0, 10));
 }
 
 function PortfolioTrades({ portfolioId }: { portfolioId: number }) {

@@ -27,6 +27,8 @@ import type {
   Position,
   PositionInput,
   ReferenceEntry,
+  RecurringContribution,
+  RecurringContributionInput,
   RiskCheckResult,
   RiskSettings,
   SecurityChart,
@@ -119,6 +121,25 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ ...payload, client_id: clientId }),
     }),
+  cashFlows: (clientId: number) => request<CashFlow[]>(`/api/clients/${clientId}/cashflows`),
+  updateCashFlow: (id: number, payload: Partial<CashFlowInput>) =>
+    request<CashFlow>(`/api/clients/cashflows/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deleteCashFlow: (id: number) => request<{ ok: boolean }>(`/api/clients/cashflows/${id}`, { method: "DELETE" }),
+
+  recurringContributions: (clientId: number) =>
+    request<RecurringContribution[]>(`/api/clients/${clientId}/recurring-contributions`),
+  createRecurringContribution: (clientId: number, payload: RecurringContributionInput) =>
+    request<RecurringContribution>(`/api/clients/${clientId}/recurring-contributions`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  updateRecurringContribution: (id: number, payload: Partial<RecurringContributionInput>) =>
+    request<RecurringContribution>(`/api/clients/recurring-contributions/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  deleteRecurringContribution: (id: number) =>
+    request<{ ok: boolean }>(`/api/clients/recurring-contributions/${id}`, { method: "DELETE" }),
 
   globalPortfolio: (ccy: string) => request<GlobalPortfolio>(`/api/portfolios/global?ccy=${ccy}`),
   portfolio: (id: number, ccy: string) => request<Portfolio>(`/api/portfolios/${id}?ccy=${ccy}`),

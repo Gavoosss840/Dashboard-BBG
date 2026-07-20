@@ -354,6 +354,49 @@ class CashFlowCreate(BaseModel):
     currency: str = "EUR"
 
 
+class CashFlowUpdate(BaseModel):
+    date: dt.date | None = None
+    flow_type: str | None = None
+    amount: float | None = None
+    currency: str | None = None
+
+
+class RecurringContributionOut(ORMBase):
+    id: int
+    client_id: int
+    flow_type: str
+    amount: float
+    currency: str
+    day_of_month: int
+    label: str
+    active: bool
+    start_date: dt.date
+    end_date: dt.date | None = None
+    last_generated_month: str | None = None
+
+
+class RecurringContributionCreate(BaseModel):
+    flow_type: str = "deposit"  # "deposit" | "withdrawal"
+    amount: float
+    currency: str = "EUR"
+    day_of_month: int = 1
+    label: str = ""
+    active: bool = True
+    start_date: dt.date
+    end_date: dt.date | None = None
+
+
+class RecurringContributionUpdate(BaseModel):
+    flow_type: str | None = None
+    amount: float | None = None
+    currency: str | None = None
+    day_of_month: int | None = None
+    label: str | None = None
+    active: bool | None = None
+    start_date: dt.date | None = None
+    end_date: dt.date | None = None
+
+
 class AumTargetOut(ORMBase):
     id: int
     label: str

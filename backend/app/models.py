@@ -383,3 +383,26 @@ class RiskSettings(Base):
     max_drawdown_pct: Mapped[float] = mapped_column(Float, default=15.0)   # freeze new trades beyond
     stop_loss_pct: Mapped[float] = mapped_column(Float, default=12.0)      # default invalidation level
     kill_switch: Mapped[bool] = mapped_column(Boolean, default=False)      # emergency stop
+
+
+class RecurringContribution(Base):
+    """A scheduled recurring cash flow (DCA-style): 'deposit 500 EUR on the
+    5th of every month' for a client. Generated automatically by the
+    scheduler — last_generated_month prevents double-firing within a month."""
+
+    __tablename__ = "recurring_contributions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    client_id: Mapped[int] = mapped_column(ForeignKey("clients.id"))
+    flow_type: Mapped[str] = mapped_column(String(20), default="deposit")  # deposit | withdrawal
+    amount: Mapped[float] = mapped_column(Float)
+    currency: Mapped[str] = mapped_column(String(3), default="EUR")
+    day_of_month: Mapped[int] = mapped_column(Integer, default=1)  # 1-28 (clamped to month length)
+    label: Mapped[str] = mapped_column(String(120), default="")
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    start_date: Mapped[dt.date] = mapped_column(Date)
+    end_date: Mapped[dt.date | None] = mapped_column(Date, nullable=True)
+    # "YYYY-MM" of the last month a cash flow was auto-generated for this row
+    last_generated_month: Mapped[str | None] = mapped_column(String(7), nullable=True)
+
+    client: Mapped["Client"] = relationship()
