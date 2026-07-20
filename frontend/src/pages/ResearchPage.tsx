@@ -11,6 +11,7 @@ import { Card } from "../components/ui/Card";
 import { PageHeader } from "../components/ui/PageHeader";
 import { LoadingState, ErrorState } from "../components/ui/States";
 import { ValuationCard } from "../components/ValuationCard";
+import { TaurusSignalCard } from "../components/TaurusSignalCard";
 import { formatNumber, formatPct } from "../lib/format";
 
 function compactNumber(v: number): string {
@@ -435,6 +436,9 @@ export function ResearchPage() {
             )}
             <RiskGate symbol={q.symbol} price={q.price} currency={q.currency} sector={f?.profile.sector ?? null} />
           </div>
+
+          {/* ---- Taurus composite signal (full strategy: alpha + MM + momentum) ---- */}
+          <TaurusSignalCard symbol={q.symbol} />
         </div>
       )}
     </div>

@@ -658,6 +658,39 @@ export interface TaurusDetail {
   momentum: TaurusMomentum | null;
 }
 
+export interface TaurusAlpha {
+  alpha_monthly: number;
+  alpha_annual: number;
+  alpha_tstat: number;
+  betas: Record<string, number>;
+  r_squared: number;
+  n_obs: number;
+  model: "FF5" | "FF6";
+  region: string;
+  significant: boolean;
+  t_crit: number;
+}
+
+export interface TaurusComposite {
+  status: "ready" | "building" | "failed";
+  composite?: number | null;
+  stance?: "LONG" | "SHORT" | "NEUTRE";
+  z_alpha?: number | null;
+  z_divergence?: number | null;
+  z_momentum?: number | null;
+  weights?: { alpha: number; mm: number; momentum: number };
+  n_peers?: number;
+  region?: string;
+}
+
+export interface TaurusSignal {
+  region: string;
+  alpha: TaurusAlpha;
+  momentum_score: number | null;
+  divergence: number | null;
+  composite: TaurusComposite;
+}
+
 export interface Valuation {
   model: "standard" | "taurus";
   fair_value: number;

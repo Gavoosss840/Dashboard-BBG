@@ -243,13 +243,31 @@ recherche ; le risque peut bloquer le trade — c'est tout l'intérêt »* :
      nombre de Graham, juste valeur PEG=1 (Lynch), DCF simplifié FCF — utilisé
      pour les instruments sans bilan (indices, ETF, FX, crypto).
 
-   > Note : la couche complète de Taurus est un signal composite
-   > cross-sectionnel `w_α·z(alpha FF5/FF6) + w_mm·z(divergence MM) +
-   > w_mom·z(momentum)` calculé sur tout un univers au rebalancement mensuel.
-   > L'alpha factoriel FF5/FF6 est un classement inter-titres (régression
-   > 60 mois sur l'indice), pas une valeur ponctuelle par titre : le terminal
-   > expose donc la **valorisation MM** (l'estimation intrinsèque par titre)
-   > et le momentum, qui se calculent fidèlement à l'instant T.
+3. **Signal composite Taurus** (`backend/app/services/taurus_factors.py` +
+   `taurus_universe.py`) — la stratégie complète, sur la page Recherche
+   Equity. Le signal est `0.40·z(alpha FF5/6) + 0.30·z(divergence MM) +
+   0.30·z(momentum)`, exactement comme dans le repo :
+   - **Jambe alpha (CAPM + FF5/FF6 → SML alpha)** : régression OLS vectorisée
+     des rendements mensuels du titre sur les facteurs Ken French **régionaux**
+     (US / Europe / Japon / Asie-Pacifique, choisis selon la cotation), avec
+     erreurs-types **HC1** et seuil **Student-t (ν=5)**. Port validé bit-à-bit
+     de `taurus/factors.py`. La carte affiche l'alpha annualisé, le t-stat, la
+     significativité, le R² et les 6 betas factoriels (Marché, SMB, HML, RMW,
+     CMA, UMD).
+   - **z-score cross-sectionnel** : un signal composite se normalise contre une
+     distribution de pairs. Un **batch univers** (constituants de l'indice de
+     la région) calcule les 3 jambes sur ~40-50 pairs, en déduit la
+     médiane/MAD de chaque jambe (mis en cache 24 h, calculé en tâche de fond),
+     et place le titre dedans (z robuste, clip ±3). Le composite pondéré donne
+     un score et une orientation LONG (≥ +0,5) / NEUTRE / SHORT (≤ −0,5).
+   - Pendant le calcul du batch, la carte montre « univers en cours de
+     calcul » et la jambe alpha reste disponible immédiatement.
+
+   > Ce qui reste dans le repo Python (hors terminal) : la **construction de
+   > portefeuille** — CML/min-variance, beta-neutral, covariance Ledoit-Wolf,
+   > sector caps — qui dimensionne et équilibre un book de 25 longs / 25 shorts
+   > sur l'univers. Ce n'est pas une valorisation par titre : ça appartient au
+   > moteur de rebalancement mensuel, pas à la fiche recherche.
    > Aide à la décision interne, pas un conseil d'investissement.
 3. **Risk Gate** (`backend/app/routers/risk.py`) : le trade proposé passe
    5 règles évaluées contre le portefeuille réel — taille de position

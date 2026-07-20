@@ -158,6 +158,40 @@ def fetch_chart(symbol: str, range_key: str) -> dict | None:
         return None
 
 
+def fetch_monthly_series(symbol: str) -> tuple[dict[int, float], list[float]] | None:
+    """5-year monthly closes → ({yyyymm: simple_return}, [closes]). Used by the
+    Taurus alpha/momentum legs. Cached via fetch_chart's cache (interval 1mo)."""
+    try:
+        resp = requests.get(
+            CHART_URL.format(symbol=symbol),
+            params={"range": "5y", "interval": "1mo"},
+            headers=_HEADERS, timeout=20,
+        )
+        if resp.status_code != 200:
+            return None
+        result = resp.json()["chart"]["result"][0]
+        timestamps = result.get("timestamp") or []
+        closes_raw = (result.get("indicators", {}).get("quote") or [{}])[0].get("close") or []
+        import datetime as _dt
+        rets: dict[int, float] = {}
+        closes: list[float] = []
+        prev = None
+        for t, c in zip(timestamps, closes_raw):
+            if c is None:
+                continue
+            ym = _dt.datetime.utcfromtimestamp(t)
+            ymi = ym.year * 100 + ym.month
+            if prev is not None and prev > 0:
+                rets[ymi] = c / prev - 1.0
+            prev = c
+            closes.append(c)
+        if len(closes) < 13:
+            return None
+        return rets, closes
+    except Exception:
+        return None
+
+
 def annualised_vol(closes: list[float]) -> float | None:
     """Annualised volatility from a daily close series (×√252)."""
     rets = [closes[i] / closes[i - 1] - 1.0 for i in range(1, len(closes)) if closes[i - 1] > 0]

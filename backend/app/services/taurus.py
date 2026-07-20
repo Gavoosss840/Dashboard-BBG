@@ -175,6 +175,33 @@ def mm_valuation(
     }
 
 
+def monthly_momentum(monthly_closes: list[float]) -> float | None:
+    """Vol-adjusted momentum on a MONTHLY close series — the definition used in
+    the cross-sectional composite (taurus/momentum.py: 12M window, skip 1M,
+    divided by trailing monthly vol ×√12). Returns the Sharpe-momentum score."""
+    window = 12
+    skip = 1
+    n = len(monthly_closes)
+    if n < window + skip + 1:
+        return None
+    end = n - 1 - skip
+    start = end - window + 1
+    if start < 0:
+        return None
+    p_start = monthly_closes[start]
+    if p_start <= 0:
+        return None
+    mom_raw = monthly_closes[end] / p_start - 1.0
+    seg = monthly_closes[start : end + 1]
+    rets = [seg[i] / seg[i - 1] - 1.0 for i in range(1, len(seg)) if seg[i - 1] > 0]
+    if len(rets) < 6:
+        return mom_raw
+    mean = sum(rets) / len(rets)
+    var = sum((r - mean) ** 2 for r in rets) / (len(rets) - 1)
+    vol = math.sqrt(var) * math.sqrt(12)
+    return mom_raw / vol if vol > 0 else mom_raw
+
+
 def vol_adjusted_momentum(closes: list[float]) -> dict | None:
     """Vol-adjusted (Sharpe) momentum — port of `taurus.momentum`.
 

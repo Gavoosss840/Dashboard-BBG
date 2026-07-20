@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app import models
 from app.database import get_db
-from app.services import securities, valuation
+from app.services import securities, taurus_universe, valuation
 
 router = APIRouter(prefix="/api/securities", tags=["securities"])
 
@@ -70,6 +70,23 @@ def security_quote(symbol: str):
     if quote is None:
         raise HTTPException(status_code=404, detail=f"Titre introuvable: {symbol}")
     return quote
+
+
+@router.get("/{symbol}/taurus-signal")
+def taurus_signal(symbol: str):
+    """Full Taurus composite signal: FF5/6 alpha, momentum, MM divergence and
+    the composite z-score vs the peer universe. The composite may report
+    status 'building' while the universe batch runs — poll again shortly."""
+    quote = securities.fetch_quote(symbol)
+    if quote is None:
+        raise HTTPException(status_code=404, detail=f"Titre introuvable: {symbol}")
+    signal = taurus_universe.signal_for(symbol, quote["currency"])
+    if signal is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Signal Taurus indisponible pour cet instrument (indice, ETF, ou historique insuffisant).",
+        )
+    return signal
 
 
 @router.get("/{symbol}/overview")
