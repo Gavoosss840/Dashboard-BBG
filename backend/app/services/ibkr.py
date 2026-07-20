@@ -208,21 +208,31 @@ def import_flex(xml_text: str, db: Session) -> dict:
                 if qty == 0:
                     continue
                 mark = _num(op, "markPrice")
-                # Per-share cost basis first; some Flex Query configurations only
-                # expose the total position cost ("costBasis") rather than a
-                # per-share figure, in which case costBasisPrice/openPrice come
-                # back empty and every position silently shows 0 unrealized P&L
-                # (avg_cost falls back to markPrice). Derive per-share from the
-                # total before giving up and accepting that fallback.
-                cost = _num(op, "costBasisPrice", "openPrice")
-                if not cost:
-                    total_cost = _num(op, "costBasis")
-                    cost = abs(total_cost / qty) if total_cost and qty else mark
                 # Options/futures settle on quantity * price * multiplier (e.g. 100
                 # for a standard equity option) — IBKR always reports it, including
                 # "1" for stocks/ETFs. Falling back to 1 covers older exports that
                 # omit the attribute entirely.
                 multiplier = _num(op, "multiplier") or 1.0
+                # Per-share cost basis, tried in decreasing order of reliability:
+                #   1. costBasisPrice/openPrice — a direct per-share figure.
+                #   2. costBasis (total position cost) / quantity — some Flex Query
+                #      configurations only expose the total, not a per-share price.
+                #   3. Back out avg_cost from IBKR's own already-computed
+                #      fifoPnlUnrealized, so our downstream (mark - avg_cost) * qty
+                #      * multiplier reproduces exactly the P&L IBKR reports — this
+                #      is present on effectively every Flex export regardless of
+                #      which cost-basis fields the query includes.
+                #   4. mark price, i.e. an honest "unknown" (0 unrealized P&L)
+                #      when the statement carries no cost information at all.
+                cost = _num(op, "costBasisPrice", "openPrice")
+                if not cost:
+                    total_cost = _num(op, "costBasis")
+                    if total_cost and qty:
+                        cost = abs(total_cost / qty)
+                if not cost:
+                    fifo_pnl = _num(op, "fifoPnlUnrealized")
+                    denom = qty * multiplier
+                    cost = mark - fifo_pnl / denom if fifo_pnl and denom else mark
                 db.add(models.Position(
                     portfolio_id=portfolio.id,
                     ticker=_attr(op, "symbol"),
