@@ -325,7 +325,7 @@ function EarningsCard({ f, currency }: { f: SecurityFundamentals; currency: stri
                 <Tooltip
                   contentStyle={TOOLTIP_STYLE}
                   labelStyle={{ color: "var(--text-secondary)" }}
-                  formatter={(value: number | string) => compactNumber(Number(value))}
+                  formatter={(value) => compactNumber(Number(value))}
                 />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 <Bar name="Chiffre d'affaires" dataKey="revenue" fill="var(--series-5)" radius={[2, 2, 0, 0]} />
@@ -603,9 +603,9 @@ export function SecurityPage() {
                 contentStyle={TOOLTIP_STYLE}
                 labelStyle={{ color: "var(--text-secondary)" }}
                 labelFormatter={(t) => new Date(Number(t) * 1000).toLocaleString("fr-FR")}
-                formatter={(value: number | string, name: string) => {
+                formatter={(value, name) => {
                   if (name === "Volume") return [compactNumber(Number(value)), name];
-                  return [`${formatNumber(Number(value))} ${chart.currency}`, name];
+                  return [`${formatNumber(Number(value))} ${chart.currency}`, String(name)];
                 }}
               />
               {showVolume && (
