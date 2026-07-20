@@ -473,6 +473,7 @@ class SyncStatusOut(BaseModel):
     last_ibkr_sync: SyncLogOut | None = None
     last_market_refresh: SyncLogOut | None = None
     last_backup: SyncLogOut | None = None
+    last_earnings_sync: SyncLogOut | None = None
 
 
 class AuditLogOut(ORMBase):

@@ -26,7 +26,7 @@ function SyncResult({ log }: { log: SyncLog | null }) {
 
 export function DataSyncPage() {
   const { data, loading, error, reload } = useApi(() => api.syncStatus(), []);
-  const [busy, setBusy] = useState<"ibkr" | "market" | "backup" | null>(null);
+  const [busy, setBusy] = useState<"ibkr" | "market" | "backup" | "earnings" | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
   async function runIbkr() {
@@ -68,6 +68,19 @@ export function DataSyncPage() {
     }
   }
 
+  async function runEarnings() {
+    setBusy("earnings");
+    setActionError(null);
+    try {
+      await api.triggerEarningsSync();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(null);
+      reload();
+    }
+  }
+
   if (loading) return <LoadingState />;
   if (error) return <ErrorState message={error} />;
   if (!data) return null;
@@ -81,7 +94,7 @@ export function DataSyncPage() {
 
       {actionError && <ErrorState message={actionError} />}
 
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card
           title="Interactive Brokers — synchro quotidienne"
           action={
@@ -125,6 +138,25 @@ export function DataSyncPage() {
             réels (BCE/marché) pour les 7 devises. Rafraîchi automatiquement au démarrage.
           </p>
           <SyncResult log={data.last_market_refresh} />
+        </Card>
+
+        <Card
+          title="Earnings — calendrier de résultats"
+          action={
+            <button
+              onClick={runEarnings}
+              disabled={busy !== null}
+              className="rounded bg-[var(--series-1)] px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+            >
+              {busy === "earnings" ? "Synchronisation…" : "Synchroniser maintenant"}
+            </button>
+          }
+        >
+          <p className="mb-3 text-sm text-[var(--text-secondary)]">
+            Prochaine date de résultats (Yahoo Finance) pour chaque valeur de la watchlist — visible sur la page{" "}
+            <strong>Earnings</strong>. Rafraîchi automatiquement toutes les 12h.
+          </p>
+          <SyncResult log={data.last_earnings_sync} />
         </Card>
       </div>
 

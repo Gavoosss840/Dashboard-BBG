@@ -173,7 +173,7 @@ historique NAV, cash-flows, transactions et documents de compliance associés.
 | Recherche Equity | `/research/:symbol?` | Workflow de recherche : 4 feeds (prix, news, données, sentiment) → verdict de valorisation → Risk Gate |
 | Watchlist & News | `/market` | Watchlist éditable + actualités live par valeur |
 | Page titre | `/security/:symbol` | Page complète par valeur : cours quasi temps réel, graphique 1J→MAX (volume, MM50/MM200), ratios complets, consensus analystes, historique de résultats, profil société, actualités, détention interne |
-| Earnings | `/earnings` | Calendrier de résultats avec alertes on/off |
+| Earnings | `/earnings` | Calendrier de résultats **live** (dates Yahoo Finance) pour les valeurs de la watchlist, avec alertes on/off |
 | Allocation de capital | `/allocation` | Outil de répartition Stock Picking / Arbitrage Algo (risk parity) |
 | Référence | `/reference` | Glossaire, structure des frais, procédures internes |
 | Users | `/users` | Profils des associés |
@@ -397,6 +397,15 @@ la prochaine échéance est affichée dans la liste.
   Yahoo : cotations 20 s, graphiques 1 min (intraday) / 10 min (historique),
   fondamentaux 30 min, actualités 5 min. Les fetchs multi-symboles (bande,
   vue des marchés, news) sont parallélisés.
+- **Calendrier de résultats** (`/earnings`) : la prochaine date de résultats
+  de chaque valeur de la **watchlist** est récupérée sur Yahoo Finance
+  (`backend/app/services/earnings.py`) et mise à jour automatiquement toutes
+  les 12h (ou à la demande via le bouton **Synchroniser** sur la page, ou la
+  carte dédiée de Données & Synchro). Une valeur ajoutée à la watchlist
+  n'apparaît dans le calendrier qu'après la première synchro. Les indices,
+  ETF, devises et crypto n'ont pas de date de résultats et sont ignorés. Si
+  une synchro échoue ponctuellement pour un ticker, la date déjà connue
+  n'est pas effacée — seule une nouvelle date valide la remplace.
 - **Taux de change** : open.er-api.com (taux réels, AED inclus), rafraîchis
   au démarrage et à la demande.
 - La couche est abstraite dans `backend/app/services/market_data.py` pour

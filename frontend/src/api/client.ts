@@ -245,6 +245,7 @@ export const api = {
   triggerIbkrSync: () => request<SyncLog>(`/api/sync/ibkr`, { method: "POST" }),
   triggerMarketRefresh: () => request<SyncLog>(`/api/sync/market-data`, { method: "POST" }),
   triggerBackup: () => request<SyncLog>(`/api/sync/backup`, { method: "POST" }),
+  triggerEarningsSync: () => request<SyncLog>(`/api/sync/earnings`, { method: "POST" }),
   auditLogs: (limit = 200) => request<AuditLog[]>(`/api/audit?limit=${limit}`),
 
   marketsOverview: () => request<MarketGroup[]>(`/api/securities/markets`),

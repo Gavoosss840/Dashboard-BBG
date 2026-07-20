@@ -462,6 +462,7 @@ export interface SyncStatus {
   last_ibkr_sync: SyncLog | null;
   last_market_refresh: SyncLog | null;
   last_backup: SyncLog | null;
+  last_earnings_sync: SyncLog | null;
 }
 
 export interface AuditLog {

@@ -31,7 +31,7 @@ from app.routers import (
     users,
 )
 from app.seed_data import seed
-from app.services import backup, ibkr, market_data, recurring
+from app.services import backup, earnings, ibkr, market_data, recurring
 
 Base.metadata.create_all(bind=engine)
 ensure_schema(engine, Base)
@@ -58,6 +58,7 @@ def _scheduler_loop() -> None:
             ("backup", 24, backup.run_backup, lambda: True),
             ("ibkr", 12, ibkr.run_sync, ibkr.is_configured),
             ("market_data", 4, market_data.refresh_market_data, lambda: True),
+            ("earnings", 12, earnings.sync_earnings_from_watchlist, lambda: True),
         ):
             try:
                 if not guard():

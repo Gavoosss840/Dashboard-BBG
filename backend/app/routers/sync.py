@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app import models, schemas
 from app.database import get_db
-from app.services import backup, ibkr, market_data
+from app.services import backup, earnings, ibkr, market_data
 
 router = APIRouter(prefix="/api/sync", tags=["sync"])
 
@@ -25,6 +25,7 @@ def sync_status(db: Session = Depends(get_db)):
         last_ibkr_sync=_last_log(db, "ibkr"),
         last_market_refresh=_last_log(db, "market_data"),
         last_backup=_last_log(db, "backup"),
+        last_earnings_sync=_last_log(db, "earnings"),
     )
 
 
@@ -41,3 +42,8 @@ def trigger_market_refresh(db: Session = Depends(get_db)):
 @router.post("/backup", response_model=schemas.SyncLogOut)
 def trigger_backup(db: Session = Depends(get_db)):
     return backup.run_backup(db)
+
+
+@router.post("/earnings", response_model=schemas.SyncLogOut)
+def trigger_earnings_sync(db: Session = Depends(get_db)):
+    return earnings.sync_earnings_from_watchlist(db)
