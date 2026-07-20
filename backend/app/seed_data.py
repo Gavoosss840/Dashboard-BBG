@@ -31,14 +31,36 @@ AS_OF = today()
 
 DEMO_MODE = os.environ.get("SEED_DEMO_DATA", "false").strip().lower() in ("1", "true", "yes")
 
+# Approximate static fallbacks (units per 1 USD) used only at first run or if
+# the live FX endpoint is unreachable — the market-data sync overwrites these
+# with live rates. Kept broad on purpose: an IBKR book trades in whatever
+# currency the underlying is quoted in, and any currency absent here converts
+# 1:1 with USD in fx.convert(), silently mis-valuing the position.
 FX_RATES_VS_USD = {
     "USD": 1.0,
     "EUR": 0.92,
-    "CHF": 0.81,
-    "HKD": 7.80,
-    "JPY": 149.0,
     "GBP": 0.77,
+    "CHF": 0.81,
+    "JPY": 149.0,
+    "HKD": 7.80,
     "AED": 3.67,
+    "SAR": 3.75,   # pegged
+    "AUD": 1.52,
+    "CAD": 1.36,
+    "NZD": 1.65,
+    "SGD": 1.34,
+    "TWD": 32.0,   # NT$
+    "KRW": 1350.0,
+    "CNY": 7.20,
+    "CNH": 7.20,
+    "INR": 83.3,
+    "SEK": 10.5,
+    "NOK": 10.7,
+    "DKK": 6.87,
+    "PLN": 3.95,
+    "ZAR": 18.5,
+    "BRL": 5.40,
+    "MXN": 17.0,
 }
 
 
@@ -70,6 +92,25 @@ def _bridged_walk(start_value: float, end_value: float, n_days: int, daily_vol: 
 def _seed_fx(db: Session) -> None:
     for ccy, rate in FX_RATES_VS_USD.items():
         db.add(models.FXRate(ccy=ccy, rate_vs_usd=rate, updated_at=dt.datetime.combine(AS_OF, dt.time(8, 0))))
+
+
+def ensure_fx_currencies(db: Session) -> int:
+    """Top up any fallback currency missing from the FX table, without touching
+    existing (possibly live-refreshed) rows. The full seed only runs on an empty
+    table, so a database created before the currency list was broadened would
+    otherwise never gain SAR/AUD/CAD/TWD/... — leaving those positions to convert
+    1:1 with USD. Idempotent: safe to call on every startup.
+    """
+    existing = {r.ccy for r in db.query(models.FXRate.ccy).all()}
+    now = dt.datetime.utcnow()
+    added = 0
+    for ccy, rate in FX_RATES_VS_USD.items():
+        if ccy not in existing:
+            db.add(models.FXRate(ccy=ccy, rate_vs_usd=rate, updated_at=now))
+            added += 1
+    if added:
+        db.commit()
+    return added
 
 
 def _seed_reference(db: Session) -> None:

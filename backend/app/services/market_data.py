@@ -14,7 +14,6 @@ import requests
 from sqlalchemy.orm import Session
 
 from app import models
-from app.services.fx import SUPPORTED_CURRENCIES
 
 YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
 FX_URL = "https://open.er-api.com/v6/latest/USD"
@@ -44,15 +43,28 @@ def fetch_yahoo_quote(symbol: str) -> tuple[float, float] | None:
 
 
 def fetch_fx_rates() -> dict[str, float] | None:
-    """Rates as units of CCY per 1 USD, for every platform currency."""
+    """Rates as units of CCY per 1 USD, for EVERY currency the API returns.
+
+    Not filtered to a hardcoded shortlist: an IBKR book holds positions and
+    cash in whatever currency the underlying trades in (SAR, AUD, CAD, TWD,
+    KRW...). A currency missing from the rate table converts 1:1 with USD in
+    fx.convert() — silently and massively mis-valuing e.g. a SAR position
+    (~0.27 USD) as if 1 SAR = 1 USD. Storing the full set the free endpoint
+    returns means any currency IBKR reports already has a real rate.
+    """
     try:
         resp = requests.get(FX_URL, headers=_HEADERS, timeout=15)
         resp.raise_for_status()
         data = resp.json()
         if data.get("result") != "success":
             return None
-        rates = data["rates"]
-        return {ccy: float(rates[ccy]) for ccy in SUPPORTED_CURRENCIES if ccy in rates}
+        out: dict[str, float] = {}
+        for ccy, rate in data["rates"].items():
+            try:
+                out[ccy.upper()] = float(rate)
+            except (TypeError, ValueError):
+                continue
+        return out or None
     except Exception:
         return None
 

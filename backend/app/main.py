@@ -30,7 +30,7 @@ from app.routers import (
     sync,
     users,
 )
-from app.seed_data import seed
+from app.seed_data import ensure_fx_currencies, seed
 from app.services import backup, earnings, ibkr, market_data, recurring
 
 Base.metadata.create_all(bind=engine)
@@ -38,6 +38,9 @@ ensure_schema(engine, Base)
 
 with SessionLocal() as db:
     seed(db)
+    # Top up FX currencies added after this database was first seeded, so an
+    # IBKR book holding SAR/AUD/CAD/TWD/... never converts a position 1:1 USD.
+    ensure_fx_currencies(db)
 
 
 def _stale(kind: str, hours: int, db) -> bool:
