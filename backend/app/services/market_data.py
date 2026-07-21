@@ -21,7 +21,12 @@ _HEADERS = {"User-Agent": "Mozilla/5.0 (BouletCapital internal terminal)"}
 
 
 def fetch_yahoo_quote(symbol: str) -> tuple[float, float] | None:
-    """Return (last_price, day_change_pct) or None if the symbol is unknown."""
+    """Return (last_price, day_change_pct) or None if the symbol is unknown.
+
+    London lines quote on Yahoo in GBp (pence): a price of 6628 means £66.28.
+    IBKR reports the same holding in GBP, so we normalise pence to the major
+    unit — otherwise a .L position's live mark comes back 100x its real value.
+    """
     try:
         resp = requests.get(
             YAHOO_CHART_URL.format(symbol=symbol),
@@ -37,6 +42,8 @@ def fetch_yahoo_quote(symbol: str) -> tuple[float, float] | None:
         if price is None:
             return None
         change = ((price / prev) - 1) * 100 if prev else 0.0
+        if (meta.get("currency") or "") == "GBp":  # pence -> pounds
+            price = price / 100.0
         return float(price), float(change)
     except Exception:
         return None
@@ -102,12 +109,15 @@ def refresh_market_data(db: Session) -> models.SyncLog:
             item.last_price, item.day_change_pct = quote
             updated_watchlist += 1
 
-        # Positions: refresh marks between IBKR syncs (best effort — IBKR
-        # symbols for foreign listings may not resolve on Yahoo; the official
-        # mark from the next sync remains the source of truth).
+        # Positions: refresh marks between IBKR syncs using the mapped Yahoo
+        # data_symbol (RIO.L, CMM.AX...) rather than the raw IBKR ticker, which
+        # rarely resolves for foreign listings. The official mark from the next
+        # sync remains the source of truth; this just keeps intraday values live.
         seen: dict[str, tuple[float, float] | None] = {}
         for pos in db.query(models.Position).all():
-            symbol = pos.ticker
+            symbol = pos.data_symbol or pos.ticker
+            if not symbol:
+                continue
             if symbol not in seen:
                 seen[symbol] = fetch_yahoo_quote(symbol)
             quote = seen[symbol]

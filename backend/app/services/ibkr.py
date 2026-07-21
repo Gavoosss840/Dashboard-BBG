@@ -161,6 +161,56 @@ ASSET_CLASS_MAP = {
     "CFD": "cfd", "WAR": "warrant",
 }
 
+# IBKR listing exchange -> Yahoo Finance symbol suffix. US venues carry no
+# suffix; everything else needs one for Yahoo to resolve the right listing.
+_YAHOO_SUFFIX_BY_EXCHANGE = {
+    "NASDAQ": "", "NYSE": "", "AMEX": "", "ARCA": "", "BATS": "", "IEX": "",
+    "PINK": "", "NMS": "", "PSE": "", "NYSENAT": "",
+    "LSE": ".L", "LSEETF": ".L",
+    "ASX": ".AX",
+    "TSE": ".TO", "TSX": ".TO", "VENTURE": ".V", "TSXV": ".V",
+    "TADAWUL": ".SR",
+    "TWSE": ".TW",
+    "SEHK": ".HK", "SEHKNTL": ".HK",
+    "SGX": ".SI",
+    "TSEJ": ".T",
+    "KSE": ".KS",
+    "NSE": ".NS", "BSE": ".BO",
+    "FWB": ".F", "SWB": ".SG", "IBIS": ".DE", "IBIS2": ".DE", "GETTEX": ".DE",
+    "SBF": ".PA", "AEB": ".AS", "ENEXT.BE": ".BR",
+    "BVME": ".MI", "BVME.ETF": ".MI",
+    "BM": ".MC", "MEFFRV": ".MC",
+    "SFB": ".ST", "OMXNO": ".OL", "CPH": ".CO", "HEX": ".HE",
+    "VSE": ".VI", "EBS": ".SW",
+}
+
+
+def _yahoo_symbol(ib_symbol: str, listing_exchange: str) -> str:
+    """Best-effort Yahoo symbol for an IBKR listing (symbol + venue suffix).
+
+    Handles the two common IBKR/Yahoo shape differences: class shares use a
+    space in IBKR but a dash on Yahoo ("BRK B" -> "BRK-B"), and IBKR sometimes
+    appends a lowercase class letter to a London line ("RIOl" -> "RIO"). It is
+    intentionally conservative — the position keeps an editable data_symbol, so
+    an odd ticker Yahoo names differently (e.g. a GDR) can be fixed by hand
+    rather than guessed wrong.
+    """
+    sym = (ib_symbol or "").strip()
+    if not sym:
+        return ""
+    suffix = _YAHOO_SUFFIX_BY_EXCHANGE.get((listing_exchange or "").upper().strip())
+    base = sym.replace(" ", "-").upper()
+    # A trailing lowercase letter on the raw IBKR symbol is a class marker, not
+    # part of the Yahoo root (RIOl -> RIO); only strip when it left a dangling
+    # single letter after an otherwise clean root.
+    if len(sym) > 1 and sym[-1].islower() and sym[:-1].isalpha():
+        base = sym[:-1].upper()
+    if suffix is None:
+        # Unknown venue: for a US-looking (plain alpha) ticker, no suffix is the
+        # safe guess; otherwise leave blank so the editable field prompts a fix.
+        return base if base.isalpha() else ""
+    return base + suffix
+
 
 TRADE_COMMIT_BATCH = 500  # flush+commit this often during the trades loop
 
@@ -284,11 +334,17 @@ def import_flex(xml_text: str, db: Session) -> dict:
                     if fifo_pnl_base and denom:
                         fifo_pnl_local = fifo_pnl_base / fx_to_base
                         cost = mark - fifo_pnl_local / denom
+                ib_symbol = _attr(op, "symbol")
+                listing_exchange = _attr(op, "listingExchange", "exchange")
+                # Options/futures price off Yahoo poorly; only map cash equities
+                # and ETFs to a Yahoo data symbol.
+                asset_cat = _attr(op, "assetCategory").upper().split()[0] if _attr(op, "assetCategory") else ""
+                data_symbol = _yahoo_symbol(ib_symbol, listing_exchange) if asset_cat in ("STK", "ETF", "") else ""
                 db.add(models.Position(
                     portfolio_id=portfolio.id,
-                    ticker=_attr(op, "symbol"),
+                    ticker=ib_symbol,
                     name=_attr(op, "description", "symbol"),
-                    asset_class=ASSET_CLASS_MAP.get(_attr(op, "assetCategory").upper().split()[0] if _attr(op, "assetCategory") else "", "equity"),
+                    asset_class=ASSET_CLASS_MAP.get(asset_cat, "equity"),
                     sector=_attr(op, "subCategory"),
                     region="",
                     currency=_attr(op, "currency", default="USD"),
@@ -296,6 +352,8 @@ def import_flex(xml_text: str, db: Session) -> dict:
                     avg_cost=cost,
                     last_price=mark,
                     multiplier=multiplier,
+                    listing_exchange=listing_exchange,
+                    data_symbol=data_symbol,
                 ))
                 stats["positions"] += 1
 

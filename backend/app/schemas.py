@@ -86,6 +86,8 @@ class PositionOut(ORMBase):
     quantity: float
     avg_cost: float
     last_price: float
+    listing_exchange: str = ""
+    data_symbol: str = ""
     market_value: float = 0.0
     unrealized_pnl: float = 0.0
 
@@ -252,6 +254,8 @@ class PositionCreate(BaseModel):
     quantity: float
     avg_cost: float
     last_price: float
+    listing_exchange: str = ""
+    data_symbol: str = ""
 
 
 class PositionUpdate(BaseModel):
@@ -264,6 +268,8 @@ class PositionUpdate(BaseModel):
     quantity: float | None = None
     avg_cost: float | None = None
     last_price: float | None = None
+    listing_exchange: str | None = None
+    data_symbol: str | None = None
 
 
 class UserCreate(BaseModel):

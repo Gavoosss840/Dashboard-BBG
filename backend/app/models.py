@@ -117,6 +117,13 @@ class Position(Base):
     # multiplier — e.g. 100 for a standard equity option. Left at 1 wrongly
     # inflates or deflates market value for any account holding derivatives.
     multiplier: Mapped[float] = mapped_column(Float, default=1.0)
+    # IBKR's listing venue for this position ("LSE", "ASX", "TADAWUL"...), and
+    # the Yahoo symbol it maps to (e.g. "RIO.L", "CMM.AX", "2222.SR") — the raw
+    # IBKR ticker rarely resolves on Yahoo for non-US listings. data_symbol is
+    # what live pricing and the security page use; auto-derived on import but
+    # editable for the rare case the derivation misses.
+    listing_exchange: Mapped[str] = mapped_column(String(20), default="")
+    data_symbol: Mapped[str] = mapped_column(String(30), default="")
 
     portfolio: Mapped["Portfolio"] = relationship(back_populates="positions")
 
