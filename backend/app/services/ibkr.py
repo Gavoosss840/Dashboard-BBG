@@ -199,6 +199,7 @@ def import_flex(xml_text: str, db: Session) -> dict:
         "cash_flows_new": 0, "nav_points": 0, "cash_balances": 0,
     }
     trades_since_commit = 0
+    touched_portfolio_ids: set[int] = set()
 
     for stmt in root.iter("FlexStatement"):
         account_id = _attr(stmt, "accountId")
@@ -208,6 +209,7 @@ def import_flex(xml_text: str, db: Session) -> dict:
                 stats["accounts_unmatched"].append(account_id)
             continue
         stats["accounts_matched"].append(account_id)
+        touched_portfolio_ids.add(portfolio.id)
         client_id = portfolio.client_id
 
         # ---- Open positions: replace wholesale with the custodian's view ----
@@ -262,8 +264,12 @@ def import_flex(xml_text: str, db: Session) -> dict:
                 #      the display currency, reproduces the P&L IBKR reports — this
                 #      is present on effectively every Flex export regardless of
                 #      which cost-basis fields the query includes.
-                #   4. mark price, i.e. an honest "unknown" (0 unrealized P&L) when
-                #      the statement carries no cost information at all.
+                #   4. left at 0 — a sentinel meaning "no cost in the statement";
+                #      backfilled from the imported trades after this loop, and
+                #      only then falling back to mark (0 P&L) if there are no
+                #      trades either. IBKR frequently reports every cost field as
+                #      0 on SUMMARY-level open positions, so this backfill is the
+                #      normal path, not an edge case.
                 cost = _num(op, "costBasisPrice", "openPrice")
                 if not cost:
                     # IBKR's total-cost attribute is "costBasisMoney" (the older
@@ -278,8 +284,6 @@ def import_flex(xml_text: str, db: Session) -> dict:
                     if fifo_pnl_base and denom:
                         fifo_pnl_local = fifo_pnl_base / fx_to_base
                         cost = mark - fifo_pnl_local / denom
-                    else:
-                        cost = mark
                 db.add(models.Position(
                     portfolio_id=portfolio.id,
                     ticker=_attr(op, "symbol"),
@@ -404,7 +408,51 @@ def import_flex(xml_text: str, db: Session) -> dict:
                 stats["cash_balances"] += 1
 
     db.commit()
+
+    # Fill the cost basis IBKR left at 0 (see the sentinel above) from the
+    # trades we just imported — the only place the entry prices actually live
+    # when open positions come through at SUMMARY level.
+    if touched_portfolio_ids:
+        _backfill_cost_from_trades(db, touched_portfolio_ids)
+
     return stats
+
+
+def _backfill_cost_from_trades(db: Session, portfolio_ids: set[int]) -> None:
+    """Set avg_cost for positions the statement carried without a cost basis.
+
+    IBKR's SUMMARY-level OpenPositions frequently report costBasisPrice,
+    costBasisMoney and fifoPnlUnrealized all as 0 — so avg_cost lands at 0 and
+    the whole book shows 0 unrealized P&L. The executed trades, however, carry
+    the real entry prices. We rebuild a per-contract average entry cost from the
+    BUY trades (average-cost method: a partial sell leaves the remaining shares'
+    average untouched, so the mean buy price is the right cost basis) in the
+    position's own currency, and apply it only where a cost is still missing —
+    positions IBKR did price keep their official figure. A position with no
+    matching trade at all (e.g. transferred in) falls back to its mark, an
+    honest 0 P&L rather than a fabricated one.
+    """
+    for pid in portfolio_ids:
+        buy_qty: dict[tuple, float] = {}
+        buy_cost: dict[tuple, float] = {}
+        for ticker, currency, side, qty, price in db.query(
+            models.Trade.ticker, models.Trade.currency, models.Trade.side,
+            models.Trade.quantity, models.Trade.price,
+        ).filter(models.Trade.portfolio_id == pid).all():
+            if side != "BUY" or not qty or not price:
+                continue
+            key = (ticker, currency)
+            buy_qty[key] = buy_qty.get(key, 0.0) + qty
+            buy_cost[key] = buy_cost.get(key, 0.0) + qty * price
+
+        positions = db.query(models.Position).filter(models.Position.portfolio_id == pid).all()
+        for pos in positions:
+            if pos.avg_cost and pos.avg_cost > 0:
+                continue  # IBKR gave us a real cost — keep it
+            key = (pos.ticker, pos.currency)
+            q = buy_qty.get(key, 0.0)
+            pos.avg_cost = (buy_cost[key] / q) if q > 0 else pos.last_price
+    db.commit()
 
 
 def run_sync(db: Session) -> models.SyncLog:
