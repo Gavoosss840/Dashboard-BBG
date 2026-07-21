@@ -386,7 +386,12 @@ def fetch_fundamentals(symbol: str) -> dict | None:
                 if current_trend
                 else None,
             },
-            "calendar": {"next_earnings_date": min(earnings_dates) if earnings_dates else None},
+            "calendar": {
+                "next_earnings_date": min(earnings_dates) if earnings_dates else None,
+                # Consensus estimates for the upcoming report (Yahoo calendarEvents).
+                "eps_estimate": _fmt_field(ce.get("earnings", {}), "earningsAverage"),
+                "revenue_estimate": _fmt_field(ce.get("earnings", {}), "revenueAverage"),
+            },
             "earnings_history": {"quarterly_eps": quarterly_eps, "yearly_financials": yearly_financials},
             "profile": {
                 "sector": ap.get("sector"),
