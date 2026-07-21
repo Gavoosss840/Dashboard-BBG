@@ -133,6 +133,28 @@ def _date(raw: str) -> dt.date | None:
     return None
 
 
+def _latest_snapshot(elements: list[ET.Element], *key_names: str) -> list[ET.Element]:
+    """Collapse a repeated daily series to one row per identity — the latest.
+
+    IBKR's "Détailler par jour = Oui" (Detail by day) emits one row per position
+    (or per cash currency) FOR EACH DAY of the query period, all inside the same
+    statement, each tagged with a reportDate. Importing them all would insert a
+    given position once per day — duplicating the whole book and multiplying
+    every valuation. Grouping on the identity key and keeping the row with the
+    greatest reportDate reduces the series back to the current snapshot, and
+    works whether detail-by-day is on or off (a single row simply wins trivially).
+    """
+    best: dict[tuple, ET.Element] = {}
+    best_date: dict[tuple, str] = {}
+    for el in elements:
+        key = tuple(_attr(el, n) for n in key_names)
+        rd = _attr(el, "reportDate", "toDate", "date", "reportDateTime")
+        if key not in best or rd >= best_date.get(key, ""):
+            best[key] = el
+            best_date[key] = rd
+    return list(best.values())
+
+
 ASSET_CLASS_MAP = {
     "STK": "equity", "ETF": "etf", "FUND": "fund", "BOND": "bond", "BILL": "bond",
     "OPT": "option", "FOP": "option", "FUT": "future", "CASH": "fx", "CRYPTO": "crypto",
@@ -190,15 +212,19 @@ def import_flex(xml_text: str, db: Session) -> dict:
 
         # ---- Open positions: replace wholesale with the custodian's view ----
         open_positions = list(stmt.iter("OpenPosition"))
+        # Reduce a detail-by-day series (same symbol repeated per day) to the
+        # latest snapshot per contract — otherwise the whole book is imported
+        # once per day of the period. conid is IBKR's unique contract id; fall
+        # back to symbol+currency when it's absent.
+        open_positions = _latest_snapshot(open_positions, "conid", "symbol", "currency")
         if open_positions:
             # flush first: the session has autoflush=False, and a multi-day Flex
-            # Query period returns one <FlexStatement> per day, each with its own
-            # OpenPositions snapshot. Without an explicit flush, a still-pending
-            # (unflushed) insert from an EARLIER statement in this same loop is
-            # invisible to this bulk delete — it isn't in the table yet, so it
-            # can't be removed — and both days' snapshots end up committed
-            # together, duplicating every position that appears in more than
-            # one day's statement.
+            # Query period can also return one <FlexStatement> per day. Without an
+            # explicit flush, a still-pending (unflushed) insert from an EARLIER
+            # statement in this same loop is invisible to this bulk delete — it
+            # isn't in the table yet, so it can't be removed — and both days'
+            # snapshots end up committed together, duplicating every position
+            # that appears in more than one day's statement.
             db.flush()
             db.query(models.Position).filter(models.Position.portfolio_id == portfolio.id).delete(
                 synchronize_session=False
@@ -354,10 +380,10 @@ def import_flex(xml_text: str, db: Session) -> dict:
         detail_levels = {_attr(cr, "levelOfDetail") for cr in cash_rows_raw}
         if "Currency" in detail_levels:
             cash_rows_raw = [cr for cr in cash_rows_raw if _attr(cr, "levelOfDetail") == "Currency"]
-        cash_by_currency: dict[str, ET.Element] = {}
-        for cr in cash_rows_raw:
-            cash_by_currency[_attr(cr, "currency").upper()] = cr
-        cash_rows = list(cash_by_currency.values())
+        # Keep one row per currency — the latest reportDate — so detail-by-day
+        # (a row per currency per day) doesn't leave several balances per
+        # currency, and a same-day duplicate never wins over the current one.
+        cash_rows = _latest_snapshot(cash_rows_raw, "currency")
         if cash_rows:
             # Same multi-day-statement/autoflush hazard as the positions block
             # above — flush pending inserts from an earlier statement before
