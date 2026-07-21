@@ -263,6 +263,10 @@ export const api = {
   securitiesSearch: (q: string) =>
     request<SecuritySearchResult>(`/api/securities/search?q=${encodeURIComponent(q)}`),
   securitiesTape: () => request<TapeQuote[]>(`/api/securities/tape`),
+  securityMetrics: (symbols: string[]) =>
+    request<Record<string, Record<string, number | string | null>>>(
+      `/api/securities/metrics?symbols=${encodeURIComponent(symbols.join(","))}`
+    ),
   securityQuote: (symbol: string) => request<SecurityQuote>(`/api/securities/${encodeURIComponent(symbol)}/quote`),
   securityChart: (symbol: string, range: string) =>
     request<SecurityChart>(`/api/securities/${encodeURIComponent(symbol)}/chart?range=${range}`),

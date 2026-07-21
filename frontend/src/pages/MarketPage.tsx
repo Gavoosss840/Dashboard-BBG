@@ -6,11 +6,16 @@ import { Card } from "../components/ui/Card";
 import { PageHeader } from "../components/ui/PageHeader";
 import { LoadingState, ErrorState } from "../components/ui/States";
 import { formatDateTime, formatMoney, formatPct } from "../lib/format";
+import { MetricColumnPicker, useMetrics, useMetricColumns } from "../components/MetricColumns";
+import { METRIC_BY_KEY, formatMetric } from "../lib/metrics";
 
 export function MarketPage() {
   const [tab, setTab] = useState<"watchlist" | "news">("watchlist");
   const watchlist = useApi(() => api.watchlist(), []);
   const news = useApi(() => api.liveNews(), []);
+  const [metricCols, setMetricCols] = useMetricColumns("watchlist", ["market_cap", "trailing_pe", "dividend_yield"]);
+  const watchSymbols = (watchlist.data ?? []).map((w) => w.data_symbol ?? w.ticker);
+  const metrics = useMetrics(watchSymbols, tab === "watchlist" && watchSymbols.length > 0);
   const [newTicker, setNewTicker] = useState("");
   const [newDataSymbol, setNewDataSymbol] = useState("");
   const [adding, setAdding] = useState(false);
@@ -74,7 +79,8 @@ export function MarketPage() {
       {tab === "watchlist" && (
         <Card
           action={
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
+              <MetricColumnPicker tableKey="watchlist" selected={metricCols} onChange={setMetricCols} />
               <input
                 value={newTicker}
                 onChange={(e) => setNewTicker(e.target.value)}
@@ -109,6 +115,11 @@ export function MarketPage() {
                   <th className="pb-2">Classe</th>
                   <th className="pb-2 text-right">Dernier prix</th>
                   <th className="pb-2 text-right">Variation jour</th>
+                  {metricCols.map((k) => (
+                    <th key={k} className="pb-2 text-right" title={METRIC_BY_KEY[k]?.full}>
+                      {METRIC_BY_KEY[k]?.label ?? k}
+                    </th>
+                  ))}
                   <th className="pb-2">Symbole data</th>
                   <th className="pb-2">Ajouté par</th>
                   <th className="pb-2"></th>
@@ -134,6 +145,15 @@ export function MarketPage() {
                     >
                       {formatPct(w.day_change_pct)}
                     </td>
+                    {metricCols.map((k) => {
+                      const def = METRIC_BY_KEY[k];
+                      const raw = metrics[w.data_symbol ?? w.ticker]?.[k];
+                      return (
+                        <td key={k} className={`tabular py-2 ${def?.align === "left" ? "text-left" : "text-right"}`}>
+                          {def ? formatMetric(raw, def.format) : "—"}
+                        </td>
+                      );
+                    })}
                     <td className="py-2">
                       <button
                         onClick={() => editDataSymbol(w.id, w.data_symbol)}

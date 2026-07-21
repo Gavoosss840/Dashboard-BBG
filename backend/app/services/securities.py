@@ -435,6 +435,70 @@ def market_overview() -> list[dict]:
     return out
 
 
+# ---------- Configurable metrics (for custom columns) ----------
+
+def _metrics_for_one(symbol: str) -> dict:
+    """Flat metric bag for one symbol, pulled from the (cached) quote and
+    fundamentals. Keys are the stable identifiers the frontend column catalog
+    references; missing values come back as None and render as '—'."""
+    quote = fetch_quote(symbol)
+    fund = fetch_fundamentals(symbol) or {}
+    val = fund.get("valuation", {})
+    prof = fund.get("profitability", {})
+    health = fund.get("health", {})
+    div = fund.get("dividend", {})
+    own = fund.get("ownership", {})
+    analyst = fund.get("analyst", {})
+    profile = fund.get("profile", {})
+    return {
+        "price": quote.get("price") if quote else None,
+        "day_change_pct": quote.get("change_pct") if quote else None,
+        "currency": quote.get("currency") if quote else None,
+        "fifty_two_week_high": quote.get("fifty_two_week_high") if quote else None,
+        "fifty_two_week_low": quote.get("fifty_two_week_low") if quote else None,
+        "volume": quote.get("volume") if quote else None,
+        "market_cap": val.get("market_cap"),
+        "trailing_pe": val.get("trailing_pe"),
+        "forward_pe": val.get("forward_pe"),
+        "peg": val.get("peg"),
+        "price_to_book": val.get("price_to_book"),
+        "price_to_sales": val.get("price_to_sales"),
+        "ev_to_ebitda": val.get("ev_to_ebitda"),
+        "beta": val.get("beta"),
+        "revenue_growth": prof.get("revenue_growth"),
+        "earnings_growth": prof.get("earnings_growth"),
+        "gross_margin": prof.get("gross_margin"),
+        "operating_margin": prof.get("operating_margin"),
+        "profit_margin": prof.get("profit_margin"),
+        "roe": prof.get("roe"),
+        "roa": prof.get("roa"),
+        "eps": prof.get("eps"),
+        "forward_eps": prof.get("forward_eps"),
+        "debt_to_equity": health.get("debt_to_equity"),
+        "current_ratio": health.get("current_ratio"),
+        "free_cashflow": health.get("free_cashflow"),
+        "dividend_yield": div.get("yield"),
+        "payout_ratio": div.get("payout_ratio"),
+        "avg_volume": own.get("avg_volume"),
+        "short_percent_float": own.get("short_percent_float"),
+        "target_mean": analyst.get("target_mean"),
+        "recommendation": analyst.get("recommendation"),
+        "num_analysts": analyst.get("num_analysts"),
+        "sector": profile.get("sector"),
+        "industry": profile.get("industry"),
+    }
+
+
+def metrics_for(symbols: list[str]) -> dict[str, dict]:
+    """Metric bags for many symbols in parallel, keyed by the symbol asked for."""
+    uniq = list(dict.fromkeys(s for s in symbols if s))
+    if not uniq:
+        return {}
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(pool.map(_metrics_for_one, uniq))
+    return dict(zip(uniq, results))
+
+
 # ---------- Per-ticker news (RSS headline feed) ----------
 
 _ticker_news_cache: dict[str, tuple[float, list[dict]]] = {}

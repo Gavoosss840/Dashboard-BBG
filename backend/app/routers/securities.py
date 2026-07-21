@@ -25,6 +25,14 @@ def markets_overview():
     return securities.market_overview()
 
 
+@router.get("/metrics")
+def security_metrics(symbols: str = Query(..., description="Comma-separated Yahoo symbols")):
+    """Configurable-column metrics (P/E, beta, margins, dividend yield...) for a
+    set of symbols. Powers the custom columns on the watchlist and portfolios."""
+    wanted = [s.strip() for s in symbols.split(",") if s.strip()][:60]
+    return securities.metrics_for(wanted)
+
+
 @router.get("/news")
 def live_news(db: Session = Depends(get_db)):
     """Aggregated latest headlines for the whole watchlist."""

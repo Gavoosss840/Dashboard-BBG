@@ -20,6 +20,8 @@ import { PositionForm } from "../components/forms/PositionForm";
 import { CashFlowForm } from "../components/forms/CashFlowForm";
 import { RecurringContributionForm } from "../components/forms/RecurringContributionForm";
 import { formatDate, formatMoney, formatNumber, formatPct } from "../lib/format";
+import { MetricColumnPicker, useMetrics, useMetricColumns } from "../components/MetricColumns";
+import { METRIC_BY_KEY, formatMetric } from "../lib/metrics";
 import type {
   CashFlow,
   CashFlowInput,
@@ -58,6 +60,12 @@ export function ClientDetailPage() {
   const recurring = useApi(() => api.recurringContributions(clientId), [clientId]);
   const [modal, setModal] = useState<ModalState>(null);
   const navigate = useNavigate();
+  const [posMetricCols, setPosMetricCols] = useMetricColumns("positions", ["day_change_pct", "trailing_pe", "beta"]);
+  const positionSymbols = useMemo(
+    () => (data?.portfolios ?? []).flatMap((p) => p.positions.map((pos) => pos.data_symbol || pos.ticker)).filter(Boolean),
+    [data]
+  );
+  const posMetrics = useMetrics(positionSymbols, positionSymbols.length > 0);
 
   const combinedNav = useMemo(() => {
     if (!data) return [];
@@ -486,7 +494,8 @@ export function ClientDetailPage() {
           title={`Positions — Portefeuille ${p.ptf_id} (${p.strategy_bucket.replace("_", " ")})`}
           className="mt-4"
           action={
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
+              <MetricColumnPicker tableKey="positions" selected={posMetricCols} onChange={setPosMetricCols} />
               <button
                 onClick={() => setModal({ type: "newPosition", portfolioId: p.id })}
                 className="rounded border border-white/10 px-2 py-1 text-xs text-[var(--text-secondary)] hover:border-[var(--series-1)] hover:text-[var(--series-1)]"
@@ -537,6 +546,11 @@ export function ClientDetailPage() {
                   <th className="pb-2 text-right">Dernier prix</th>
                   <th className="pb-2 text-right">Valeur marché</th>
                   <th className="pb-2 text-right">P&L latent</th>
+                  {posMetricCols.map((k) => (
+                    <th key={k} className="pb-2 text-right" title={METRIC_BY_KEY[k]?.full}>
+                      {METRIC_BY_KEY[k]?.label ?? k}
+                    </th>
+                  ))}
                   <th className="pb-2"></th>
                 </tr>
               </thead>
@@ -563,6 +577,15 @@ export function ClientDetailPage() {
                     <td className="py-2 text-right">
                       <PnlValue amount={pos.unrealized_pnl} ccy={currency} compact />
                     </td>
+                    {posMetricCols.map((k) => {
+                      const def = METRIC_BY_KEY[k];
+                      const raw = posMetrics[pos.data_symbol || pos.ticker]?.[k];
+                      return (
+                        <td key={k} className={`tabular py-2 ${def?.align === "left" ? "text-left" : "text-right"}`}>
+                          {def ? formatMetric(raw, def.format) : "—"}
+                        </td>
+                      );
+                    })}
                     <td className="py-2 text-right">
                       <div className="flex justify-end gap-2">
                         <button
