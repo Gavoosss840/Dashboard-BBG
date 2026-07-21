@@ -545,11 +545,14 @@ export function ClientDetailPage() {
                   <tr key={pos.id} className="border-t border-white/5">
                     <td className="py-2 font-medium">
                       <Link
-                        to={`/security/${encodeURIComponent(pos.ticker)}`}
+                        to={`/security/${encodeURIComponent(pos.data_symbol || pos.ticker)}`}
                         className="hover:text-[var(--series-1)] hover:underline"
                       >
                         {pos.ticker}
                       </Link>
+                      {pos.data_symbol && pos.data_symbol !== pos.ticker && (
+                        <span className="ml-2 text-[10px] text-[var(--text-muted)]">{pos.data_symbol}</span>
+                      )}
                     </td>
                     <td className="py-2 text-[var(--text-secondary)]">{pos.name}</td>
                     <td className="py-2 capitalize text-[var(--text-secondary)]">{pos.asset_class}</td>

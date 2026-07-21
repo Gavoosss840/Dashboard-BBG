@@ -13,6 +13,7 @@ const DEFAULTS: PositionInput = {
   quantity: 0,
   avg_cost: 0,
   last_price: 0,
+  data_symbol: "",
 };
 
 export function PositionForm({
@@ -36,6 +37,7 @@ export function PositionForm({
           quantity: initial.quantity,
           avg_cost: initial.avg_cost,
           last_price: initial.last_price,
+          data_symbol: initial.data_symbol,
         }
       : DEFAULTS
   );
@@ -97,8 +99,16 @@ export function PositionForm({
         <Field label="Prix moyen">
           <input type="number" step="any" className={inputClass} value={form.avg_cost} onChange={(e) => set("avg_cost", Number(e.target.value))} />
         </Field>
-        <Field label="Dernier prix" span2>
+        <Field label="Dernier prix">
           <input type="number" step="any" className={inputClass} value={form.last_price} onChange={(e) => set("last_price", Number(e.target.value))} />
+        </Field>
+        <Field label="Symbole Yahoo (cotation)">
+          <input
+            className={inputClass}
+            placeholder="ex: RIO.L, CMM.AX, 2222.SR"
+            value={form.data_symbol ?? ""}
+            onChange={(e) => set("data_symbol", e.target.value.trim())}
+          />
         </Field>
       </FormGrid>
       <FormActions onCancel={onCancel} busy={busy} submitLabel={initial ? "Enregistrer" : "Ajouter la position"} />

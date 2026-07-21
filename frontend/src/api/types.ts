@@ -113,6 +113,8 @@ export interface Position {
   quantity: number;
   avg_cost: number;
   last_price: number;
+  listing_exchange: string;
+  data_symbol: string;
   market_value: number;
   unrealized_pnl: number;
 }
@@ -256,6 +258,7 @@ export interface PositionInput {
   quantity: number;
   avg_cost: number;
   last_price: number;
+  data_symbol?: string;
 }
 
 export interface UserInput {
