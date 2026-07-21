@@ -27,6 +27,11 @@ CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
 SEARCH_URL = "https://query1.finance.yahoo.com/v1/finance/search"
 SUMMARY_URL = "https://query1.finance.yahoo.com/v10/finance/quoteSummary/{symbol}"
 CRUMB_URL = "https://query1.finance.yahoo.com/v1/test/getcrumb"
+# Per-ticker RSS headline feed. Unlike the v1 search endpoint (which returns
+# generic market news for anything it can't resolve — e.g. Walmart headlines
+# tagged onto 2222.SR), this feed is genuinely scoped to the symbol, works for
+# foreign listings, and returns ~20 items per ticker instead of a handful.
+NEWS_RSS_URL = "https://feeds.finance.yahoo.com/rss/2.0/headline"
 
 RANGE_INTERVALS = {
     "1d": "5m", "5d": "30m", "1mo": "1d", "6mo": "1d",
@@ -425,28 +430,87 @@ def market_overview() -> list[dict]:
     return out
 
 
+# ---------- Per-ticker news (RSS headline feed) ----------
+
+_ticker_news_cache: dict[str, tuple[float, list[dict]]] = {}
+TICKER_NEWS_TTL_SECONDS = 120  # near real-time without hammering Yahoo
+
+
+def _parse_rss_date(raw: str) -> int | None:
+    """RFC-822 pubDate ('Mon, 21 Jul 2026 09:15:00 +0000') -> epoch seconds."""
+    if not raw:
+        return None
+    from email.utils import parsedate_to_datetime
+    try:
+        return int(parsedate_to_datetime(raw).timestamp())
+    except (TypeError, ValueError):
+        return None
+
+
+def fetch_ticker_news(symbol: str, limit: int = 20) -> list[dict]:
+    """News genuinely scoped to one ticker, from Yahoo's RSS headline feed.
+
+    Each item is tagged with the symbol it was fetched for, so an aggregated
+    feed can attribute every headline to the right instrument — the whole point
+    the v1 search endpoint got wrong for non-US listings.
+    """
+    cached = _ticker_news_cache.get(symbol)
+    if cached and time.time() - cached[0] < TICKER_NEWS_TTL_SECONDS:
+        return cached[1]
+    import xml.etree.ElementTree as ET
+
+    items: list[dict] = []
+    try:
+        resp = requests.get(
+            NEWS_RSS_URL,
+            params={"s": symbol, "region": "US", "lang": "en-US"},
+            headers=_HEADERS, timeout=15,
+        )
+        if resp.status_code == 200 and "<item>" in resp.text:
+            root = ET.fromstring(resp.text)
+            for it in root.findall(".//item")[:limit]:
+                title = (it.findtext("title") or "").strip()
+                if not title:
+                    continue
+                # <source> carries the publisher when present; fall back to the
+                # link's host so the UI always has an attribution line.
+                source_el = it.find("source")
+                publisher = (source_el.text.strip() if source_el is not None and source_el.text else "")
+                link = (it.findtext("link") or "").strip()
+                if not publisher and link:
+                    from urllib.parse import urlparse
+                    publisher = urlparse(link).netloc.replace("www.", "")
+                items.append({
+                    "title": title,
+                    "publisher": publisher,
+                    "link": link,
+                    "published_at": _parse_rss_date(it.findtext("pubDate") or ""),
+                    "symbol": symbol,
+                })
+    except Exception:
+        items = []
+    _ticker_news_cache[symbol] = (time.time(), items)
+    return items
+
+
 # ---------- Aggregated live news across a set of symbols ----------
 
 _news_cache: dict[str, tuple[float, list[dict]]] = {}
-NEWS_TTL_SECONDS = 300
+NEWS_TTL_SECONDS = 120
 
 
-def aggregate_news(symbols: list[str], limit: int = 30) -> list[dict]:
-    """Latest headlines across the watchlist, deduplicated and time-sorted."""
-    queries = symbols[:12] if symbols else ["stock market"]
+def aggregate_news(symbols: list[str], limit: int = 60) -> list[dict]:
+    """Latest headlines across the watchlist, each correctly attributed to its
+    ticker, deduplicated and time-sorted. Wide coverage: pulls the per-ticker
+    RSS feed for up to 25 symbols in parallel."""
+    queries = symbols[:25] if symbols else ["^GSPC"]
     key = ",".join(sorted(queries))
     cached = _news_cache.get(key)
     if cached and time.time() - cached[0] < NEWS_TTL_SECONDS:
         return cached[1]
 
-    def one(sym: str) -> list[dict]:
-        items = search(sym, quotes_count=0, news_count=8)["news"]
-        for n in items:
-            n["symbol"] = sym
-        return items
-
-    with ThreadPoolExecutor(max_workers=6) as pool:
-        batches = list(pool.map(one, queries))
+    with ThreadPoolExecutor(max_workers=10) as pool:
+        batches = list(pool.map(lambda s: fetch_ticker_news(s, limit=15), queries))
 
     seen: set[str] = set()
     merged: list[dict] = []

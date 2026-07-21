@@ -97,7 +97,9 @@ def security_overview(symbol: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail=f"Titre introuvable: {symbol}")
 
     fundamentals = securities.fetch_fundamentals(symbol)
-    news = securities.search(symbol, quotes_count=0, news_count=8)["news"]
+    # RSS headline feed, scoped to this exact ticker — the v1 search endpoint
+    # returns generic market news for non-US symbols.
+    news = securities.fetch_ticker_news(symbol, limit=12)
 
     # Taurus MM valuation needs realised volatility and a momentum series; a 1y
     # daily chart supplies both (cached, so this is cheap on repeat views).
