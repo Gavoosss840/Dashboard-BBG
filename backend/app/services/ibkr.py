@@ -266,7 +266,9 @@ def import_flex(xml_text: str, db: Session) -> dict:
                 #      the statement carries no cost information at all.
                 cost = _num(op, "costBasisPrice", "openPrice")
                 if not cost:
-                    total_cost_base = _num(op, "costBasis")
+                    # IBKR's total-cost attribute is "costBasisMoney" (the older
+                    # "costBasis" is accepted too for exports that use it).
+                    total_cost_base = _num(op, "costBasisMoney", "costBasis")
                     if total_cost_base and qty:
                         total_cost_local = total_cost_base / fx_to_base
                         cost = abs(total_cost_local / qty)
