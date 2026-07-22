@@ -22,7 +22,7 @@ import datetime as dt
 from sqlalchemy.orm import Session
 
 from app import models
-from app.services import fx, options, securities
+from app.services import fx, options, pnl, securities
 
 RISK_FREE = 0.04  # annual, for the Black-76 option model
 
@@ -52,12 +52,10 @@ def _daily_closes(symbol: str, range_key: str) -> dict[dt.date, float]:
     return out
 
 
-def _option_value_series(
-    pos: models.Position, range_key: str, cutoff: dt.date, target_ccy: str, rates: dict
-) -> dict[dt.date, float] | None:
-    """Black-76 mark-to-model value series for an option, off the underlying's
-    real daily history. None if the underlying can't be mapped/priced.
-    """
+def _option_price_series(pos: models.Position, range_key: str) -> dict[dt.date, float] | None:
+    """Per-unit Black-76 price series for an option, off the underlying's real
+    daily history, with vol calibrated to the option's current observed mark.
+    None if the underlying can't be mapped/priced."""
     if not (pos.opt_strike and pos.opt_expiry and pos.opt_right and pos.underlying_symbol):
         return None
     yahoo_und = options.yahoo_underlying(pos.underlying_symbol)
@@ -67,27 +65,31 @@ def _option_value_series(
     if not und:
         return None
     K, right, expiry = pos.opt_strike, pos.opt_right, pos.opt_expiry
-    mult = pos.multiplier or 1.0
     today = dt.date.today()
-
-    # Calibrate implied vol to the option's current observed mark, so the model
-    # line coincides with reality today, then hold it across the window.
     f_now = und[max(und)]
     t_now = max((expiry - today).days, 1) / 365.0
     sigma = options.implied_vol(pos.last_price, f_now, K, t_now, RISK_FREE, right)
     if sigma is None:
-        sigma = 0.35  # crude-oil-ish fallback if the mark is at/under intrinsic
-
-    fx1 = fx.convert(1.0, pos.currency, target_ccy, rates)
+        sigma = 0.35
     out: dict[dt.date, float] = {}
     for d, f in und.items():
-        if d < cutoff:
-            continue
         t = (expiry - d).days / 365.0
         if t <= 0:
             continue
-        price = options.black76(f, K, t, sigma, RISK_FREE, right)
-        out[d] = pos.quantity * price * mult * fx1
+        out[d] = options.black76(f, K, t, sigma, RISK_FREE, right)
+    return out or None
+
+
+def _option_value_series(
+    pos: models.Position, range_key: str, cutoff: dt.date, target_ccy: str, rates: dict
+) -> dict[dt.date, float] | None:
+    """Mark-to-model VALUE series (qty × price × mult × fx) for an option."""
+    prices = _option_price_series(pos, range_key)
+    if not prices:
+        return None
+    mult = pos.multiplier or 1.0
+    fx1 = fx.convert(1.0, pos.currency, target_ccy, rates)
+    out = {d: pos.quantity * p * mult * fx1 for d, p in prices.items() if d >= cutoff}
     return out or None
 
 
@@ -266,4 +268,145 @@ def _metrics(nav_series: list[dict]) -> dict | None:
         "best_day": max(rets),
         "worst_day": min(rets),
         "observations": len(navs),
+    }
+
+
+# ==========================================================================
+# Real, selection-adaptive reporting: start from the OFFICIAL IBKR NAV history
+# and remove the P&L contribution of positions the user deselected/excluded, so
+# the curve stays anchored to the real account yet reflects only the chosen
+# names — "as if the others were never held".
+# ==========================================================================
+
+def _cum_qty_steps(db: Session, portfolio_id: int, ticker: str) -> list[tuple[dt.date, float]]:
+    """Cumulative signed quantity held over time, from the trade blotter."""
+    rows = (
+        db.query(models.Trade.trade_date, models.Trade.side, models.Trade.quantity)
+        .filter(models.Trade.portfolio_id == portfolio_id, models.Trade.ticker == ticker)
+        .order_by(models.Trade.trade_date)
+        .all()
+    )
+    cum = 0.0
+    steps: list[tuple[dt.date, float]] = []
+    for td, side, q in rows:
+        cum += q if side == "BUY" else -q
+        steps.append((td, cum))
+    return steps
+
+
+def _qty_on(steps: list[tuple[dt.date, float]], d: dt.date, fallback: float) -> float:
+    """Quantity held on date d (0 before the first trade). Falls back to the
+    current quantity when there is no trade history for the name."""
+    if not steps:
+        return fallback
+    if d < steps[0][0]:
+        return 0.0
+    q = 0.0
+    for td, c in steps:
+        if td <= d:
+            q = c
+        else:
+            break
+    return q
+
+
+def _price_on(sorted_dates: list[dt.date], prices: dict[dt.date, float], d: dt.date) -> float | None:
+    """Last known price at or before d (forward-fill)."""
+    import bisect
+    i = bisect.bisect_right(sorted_dates, d) - 1
+    return prices[sorted_dates[i]] if i >= 0 else None
+
+
+def _excluded_pnl_by_date(
+    db: Session, portfolio: models.Portfolio, base_ccy: str, rates: dict, position_ids: set[int]
+) -> dict[dt.date, float]:
+    """Total unrealised P&L (in the portfolio's base ccy) of the positions in
+    `position_ids`, on each date the portfolio's NAV history covers. This is the
+    amount to subtract from the official NAV to drop those names."""
+    targets = [p for p in portfolio.positions if p.id in position_ids]
+    nav_dates = sorted({h.date for h in portfolio.nav_history})
+    if not targets or not nav_dates:
+        return {}
+    out: dict[dt.date, float] = {d: 0.0 for d in nav_dates}
+    for pos in targets:
+        # Only adjust the REAL NAV history with REAL prices. Options have no free
+        # historical price (a single-vol Black-76 misprices past dates badly), so
+        # they're dropped from the current figures but left in the historical
+        # curve — flagged to the caller instead of faked.
+        if pos.asset_class in ("option", "future") or pos.opt_right:
+            continue
+        prices = _daily_closes(pos.data_symbol or pos.ticker, "5y")
+        if not prices:
+            continue  # no real history → don't touch the real curve
+        sorted_pd = sorted(prices)
+        steps = _cum_qty_steps(db, portfolio.id, pos.ticker)
+        mult = pos.multiplier or 1.0
+        fx1 = fx.convert(1.0, pos.currency, base_ccy, rates)
+        for d in nav_dates:
+            qty = _qty_on(steps, d, pos.quantity)
+            if qty == 0:
+                continue
+            price = _price_on(sorted_pd, prices, d)
+            if price is None:
+                continue
+            out[d] += qty * (price - pos.avg_cost) * mult * fx1
+    return out
+
+
+def _twr_from_combined(
+    all_dates: list[dt.date], combined: list[float], client: models.Client,
+    rates: dict, ccy: str, start_date: dt.date | None,
+) -> float | None:
+    """Chain-linked TWR from a combined NAV series and the client's cash flows."""
+    if start_date is not None:
+        idx = [i for i, d in enumerate(all_dates) if d >= start_date]
+        if len(idx) < 2:
+            prior = [i for i, d in enumerate(all_dates) if d <= start_date]
+            start_i = prior[-1] if prior else 0
+        else:
+            start_i = idx[0]
+        all_dates = all_dates[start_i:]
+        combined = combined[start_i:]
+    if len(combined) < 2:
+        return None
+    twr = 1.0
+    for i in range(1, len(all_dates)):
+        flows = pnl._client_flows(
+            client, rates, ccy,
+            start=all_dates[i - 1] + dt.timedelta(days=1), end=all_dates[i],
+        )
+        denom = combined[i - 1] + flows
+        if denom <= 0:
+            continue
+        twr *= combined[i] / denom
+    return twr - 1.0
+
+
+def client_adjusted_performance(
+    db: Session, client: models.Client, rates: dict, target_ccy: str, as_of: dt.date,
+    excluded_ids: set[int],
+) -> dict | None:
+    """Real IBKR NAV history adjusted to drop `excluded_ids`, plus recomputed
+    TWR. None when nothing is excluded (caller keeps the official figures)."""
+    if not excluded_ids:
+        return None
+    nav_by_portfolio: dict[int, list[dict]] = {}
+    combined: dict[dt.date, float] = {}
+    for pf in client.portfolios:
+        adj_pnl = _excluded_pnl_by_date(db, pf, pf.base_currency, rates, excluded_ids)
+        rows = sorted(pf.nav_history, key=lambda h: h.date)
+        series = []
+        for h in rows:
+            nav_base = h.nav - adj_pnl.get(h.date, 0.0)
+            series.append({"date": h.date.isoformat(), "nav": round(nav_base, 2)})
+            combined[h.date] = combined.get(h.date, 0.0) + fx.convert(nav_base, pf.base_currency, target_ccy, rates)
+        nav_by_portfolio[pf.id] = series
+
+    all_dates = sorted(combined)
+    combined_navs = [combined[d] for d in all_dates]
+    year_start = dt.date(as_of.year, 1, 1)
+    return {
+        "nav_by_portfolio": nav_by_portfolio,
+        "twr_ytd": _twr_from_combined(all_dates, combined_navs, client, rates, target_ccy, year_start),
+        "twr_since_inception": _twr_from_combined(all_dates, combined_navs, client, rates, target_ccy, None),
     }

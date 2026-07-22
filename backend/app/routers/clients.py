@@ -7,7 +7,7 @@ from app import models, schemas
 from app.database import get_db
 from app.deps import fx_rates, target_currency
 from app.services import cashflow as cashflow_service
-from app.services import pnl
+from app.services import pnl, reports
 from app.utils import today
 
 router = APIRouter(prefix="/api/clients", tags=["clients"])
@@ -33,7 +33,7 @@ def _client_query(db: Session):
     )
 
 
-def _build_client_out(client: models.Client, rates: dict, ccy: str) -> schemas.ClientOut:
+def _build_client_out(db: Session, client: models.Client, rates: dict, ccy: str) -> schemas.ClientOut:
     agg = pnl.client_aggregate(client, rates, ccy, today())
     out = schemas.ClientOut.model_validate(client)
     out.total_deposits = agg["total_deposits"]
@@ -62,6 +62,27 @@ def _build_client_out(client: models.Client, rates: dict, ccy: str) -> schemas.C
         p_out.positions = positions_out
         portfolios_out.append(p_out)
     out.portfolios = portfolios_out
+
+    # "As if never held": when positions are excluded, rebuild the historical NAV
+    # curve and TWR from the REAL IBKR history minus those positions' real P&L
+    # contribution (equities; options can't be reconstructed from real prices, so
+    # they're dropped from current figures only — see reports.py).
+    excluded_ids = {pos.id for p in client.portfolios for pos in p.positions if pos.excluded}
+    if excluded_ids:
+        adj = reports.client_adjusted_performance(db, client, rates, ccy, today(), excluded_ids)
+        if adj:
+            if adj["twr_ytd"] is not None:
+                out.twr_ytd = adj["twr_ytd"]
+            if adj["twr_since_inception"] is not None:
+                out.twr_since_inception = adj["twr_since_inception"]
+            adj_nav = adj["nav_by_portfolio"]
+            for p_out in out.portfolios:
+                pts = adj_nav.get(p_out.id)
+                if pts is not None:
+                    p_out.nav_history = [
+                        schemas.NavPointOut(date=dt.date.fromisoformat(pt["date"]), nav=pt["nav"])
+                        for pt in pts
+                    ]
     return out
 
 
@@ -94,7 +115,7 @@ def get_client(
     client = _client_query(db).filter(models.Client.id == client_id).first()
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
-    return _build_client_out(client, rates, ccy)
+    return _build_client_out(db, client, rates, ccy)
 
 
 @router.post("", response_model=schemas.ClientOut)
@@ -108,7 +129,7 @@ def create_client(
     db.add(client)
     db.commit()
     client = _client_query(db).filter(models.Client.id == client.id).first()
-    return _build_client_out(client, rates, ccy)
+    return _build_client_out(db, client, rates, ccy)
 
 
 @router.patch("/{client_id}", response_model=schemas.ClientOut)
@@ -126,7 +147,7 @@ def update_client(
         setattr(client, field, value)
     db.commit()
     client = _client_query(db).filter(models.Client.id == client_id).first()
-    return _build_client_out(client, rates, ccy)
+    return _build_client_out(db, client, rates, ccy)
 
 
 @router.post("/{client_id}/cashflows", response_model=schemas.CashFlowOut)
