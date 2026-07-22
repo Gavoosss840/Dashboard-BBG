@@ -173,24 +173,48 @@ def build_report(
             "included": included, "skipped": skipped,
         }
 
-    # Union of dates where at least one position trades; sum values across
-    # positions that have a close that day (forward-fill missing days per pos).
-    all_dates = sorted({d for s in series_by_pos.values() for d in s})
-    last_val: dict[int, float] = {}
-    nav_series: list[dict] = []
-    for d in all_dates:
-        total = 0.0
-        for pid, s in series_by_pos.items():
-            if d in s:
-                last_val[pid] = s[d]
-            if pid in last_val:
-                total += last_val[pid]
-        nav_series.append({"date": d.isoformat(), "nav": round(total, 2)})
-
-    metrics = _metrics(nav_series)
     total_value = sum(i["value"] for i in included)
     for i in included:
         i["weight"] = (i["value"] / total_value) if total_value else 0.0
+
+    # Value-weighted daily RETURN index — not a raw sum of values. Positions have
+    # different history lengths (e.g. a recent IPO with only a few weeks of
+    # prices); summing absolute values makes the NAV lurch upward as each name's
+    # history "switches on", producing absurd one-day returns. Instead, each day
+    # the portfolio return is the value-weighted average of the returns of the
+    # names that actually traded BOTH that day and the prior one, weights
+    # renormalised over those active names. The index is then scaled so it ends
+    # at the selection's real current value.
+    weight = {i["id"]: i["value"] for i in included}
+    rets_by_pos: dict[int, dict[dt.date, float]] = {}
+    for pid, s in series_by_pos.items():
+        ds = sorted(s)
+        r: dict[dt.date, float] = {}
+        for k in range(1, len(ds)):
+            prev = s[ds[k - 1]]
+            if prev > 0:
+                r[ds[k]] = s[ds[k]] / prev - 1.0
+        rets_by_pos[pid] = r
+
+    ret_dates = sorted({d for r in rets_by_pos.values() for d in r})
+    start_date = min(d for s in series_by_pos.values() for d in s)
+    navs = [1.0]
+    labels = [start_date]
+    for d in ret_dates:
+        num = den = 0.0
+        for pid, r in rets_by_pos.items():
+            if d in r:
+                w = weight.get(pid, 0.0)
+                num += w * r[d]
+                den += w
+        port_ret = (num / den) if den > 0 else 0.0
+        navs.append(navs[-1] * (1 + port_ret))
+        labels.append(d)
+
+    scale = (total_value / navs[-1]) if navs[-1] else 1.0
+    nav_series = [{"date": labels[i].isoformat(), "nav": round(navs[i] * scale, 2)} for i in range(len(navs))]
+
+    metrics = _metrics(nav_series)
 
     return {
         "period": period, "currency": target_ccy,
