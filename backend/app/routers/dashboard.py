@@ -86,6 +86,8 @@ def get_dashboard(
             # "100%" of a negative total. Gross reflects capital actually at
             # work in each bucket/asset class regardless of direction.
             for pos in p.positions:
+                if pos.excluded:
+                    continue
                 exposure = abs(pnl.position_market_value(pos, rates, ccy))
                 aum_by_bucket[p.strategy_bucket] += exposure
                 aum_by_asset_class[pos.asset_class] += exposure

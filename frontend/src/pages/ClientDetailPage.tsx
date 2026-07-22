@@ -147,6 +147,11 @@ export function ClientDetailPage() {
     reload();
   }
 
+  async function toggleExcluded(pos: Position) {
+    await api.updatePosition(pos.id, { excluded: !pos.excluded });
+    reload();
+  }
+
   async function handleCashFlowSubmit(payload: CashFlowInput) {
     if (modal?.type === "editCashFlow") {
       await api.updateCashFlow(modal.flow.id, payload);
@@ -556,14 +561,21 @@ export function ClientDetailPage() {
               </thead>
               <tbody>
                 {p.positions.map((pos) => (
-                  <tr key={pos.id} className="border-t border-white/5">
+                  <tr
+                    key={pos.id}
+                    className={`border-t border-white/5 ${pos.excluded ? "opacity-40" : ""}`}
+                    title={pos.excluded ? "Position exclue des analyses (NAV, P&L, composition)" : undefined}
+                  >
                     <td className="py-2 font-medium">
                       <Link
                         to={`/security/${encodeURIComponent(pos.data_symbol || pos.ticker)}`}
-                        className="hover:text-[var(--series-1)] hover:underline"
+                        className={`hover:text-[var(--series-1)] hover:underline ${pos.excluded ? "line-through" : ""}`}
                       >
                         {pos.ticker}
                       </Link>
+                      {pos.excluded && (
+                        <span className="ml-2 rounded bg-white/10 px-1 text-[10px] text-[var(--text-muted)]">exclue</span>
+                      )}
                       {pos.data_symbol && pos.data_symbol !== pos.ticker && (
                         <span className="ml-2 text-[10px] text-[var(--text-muted)]">{pos.data_symbol}</span>
                       )}
@@ -588,6 +600,13 @@ export function ClientDetailPage() {
                     })}
                     <td className="py-2 text-right">
                       <div className="flex justify-end gap-2">
+                        <button
+                          onClick={() => toggleExcluded(pos)}
+                          className="text-xs text-[var(--text-muted)] hover:text-[var(--series-1)]"
+                          title="Exclure/réintégrer cette position dans les analyses (NAV, P&L, composition). Survit aux resyncs IBKR."
+                        >
+                          {pos.excluded ? "réintégrer" : "exclure"}
+                        </button>
                         <button
                           onClick={() => setModal({ type: "editPosition", position: pos })}
                           className="text-xs text-[var(--text-muted)] hover:text-[var(--series-1)]"

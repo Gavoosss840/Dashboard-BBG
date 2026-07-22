@@ -231,6 +231,17 @@ def import_flex(xml_text: str, db: Session) -> dict:
     root = ET.fromstring(xml_text)
     portfolios_by_account = {p.ptf_id: p for p in db.query(models.Portfolio).all()}
 
+    # Positions are replaced wholesale on every sync, so remember which ones the
+    # user had flagged "excluded from analytics" (keyed by portfolio + ticker +
+    # currency) and re-apply the flag to the re-imported line — otherwise a
+    # resync would silently pull an excluded position back into the analytics.
+    excluded_keys: set[tuple] = {
+        (r.portfolio_id, r.ticker, r.currency)
+        for r in db.query(
+            models.Position.portfolio_id, models.Position.ticker, models.Position.currency
+        ).filter(models.Position.excluded.is_(True)).all()
+    }
+
     existing_exec_ids: set[str] = {row[0] for row in db.query(models.Trade.ibkr_exec_id).all()}
     existing_cash_flow_keys: set[tuple] = {
         (r.client_id, r.date, r.amount, r.currency, r.flow_type)
@@ -354,6 +365,7 @@ def import_flex(xml_text: str, db: Session) -> dict:
                     multiplier=multiplier,
                     listing_exchange=listing_exchange,
                     data_symbol=data_symbol,
+                    excluded=(portfolio.id, ib_symbol, _attr(op, "currency", default="USD")) in excluded_keys,
                 ))
                 stats["positions"] += 1
 

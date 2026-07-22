@@ -88,6 +88,7 @@ class PositionOut(ORMBase):
     last_price: float
     listing_exchange: str = ""
     data_symbol: str = ""
+    excluded: bool = False
     market_value: float = 0.0
     unrealized_pnl: float = 0.0
 
@@ -270,6 +271,7 @@ class PositionUpdate(BaseModel):
     last_price: float | None = None
     listing_exchange: str | None = None
     data_symbol: str | None = None
+    excluded: bool | None = None
 
 
 class UserCreate(BaseModel):

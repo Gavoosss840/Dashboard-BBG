@@ -17,11 +17,19 @@ def position_unrealized_pnl(pos: models.Position, rates: dict, target_ccy: str) 
 
 
 def portfolio_market_value(portfolio: models.Portfolio, rates: dict, target_ccy: str) -> float:
-    return sum(position_market_value(p, rates, target_ccy) for p in portfolio.positions)
+    # Excluded positions are omitted from every holdings-based total, so the
+    # whole book reads as if they were never held (NAV, P&L, composition...).
+    return sum(
+        position_market_value(p, rates, target_ccy)
+        for p in portfolio.positions if not p.excluded
+    )
 
 
 def portfolio_unrealized_pnl(portfolio: models.Portfolio, rates: dict, target_ccy: str) -> float:
-    return sum(position_unrealized_pnl(p, rates, target_ccy) for p in portfolio.positions)
+    return sum(
+        position_unrealized_pnl(p, rates, target_ccy)
+        for p in portfolio.positions if not p.excluded
+    )
 
 
 def portfolio_cash(portfolio: models.Portfolio, rates: dict, target_ccy: str) -> float:

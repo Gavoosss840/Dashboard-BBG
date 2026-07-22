@@ -124,6 +124,12 @@ class Position(Base):
     # editable for the rare case the derivation misses.
     listing_exchange: Mapped[str] = mapped_column(String(20), default="")
     data_symbol: Mapped[str] = mapped_column(String(30), default="")
+    # When true, the position is kept and shown (greyed) but left OUT of every
+    # holdings-based analytic — NAV, P&L, composition, exposure — so a book can
+    # be viewed "as if this line never existed". Survives IBKR resyncs (the flag
+    # is carried over when positions are replaced), unlike a plain delete which
+    # the next sync would undo.
+    excluded: Mapped[bool] = mapped_column(Boolean, default=False)
 
     portfolio: Mapped["Portfolio"] = relationship(back_populates="positions")
 

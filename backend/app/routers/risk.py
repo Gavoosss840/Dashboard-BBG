@@ -151,7 +151,7 @@ def check_trade(payload: RiskCheckRequest, db: Session = Depends(get_db)):
             pnl.position_market_value(pos, rates, "USD")
             for p in portfolios
             for pos in p.positions
-            if (pos.sector or "").strip().lower() == sector.lower()
+            if not pos.excluded and (pos.sector or "").strip().lower() == sector.lower()
         )
         after_pct = (sector_mv + amount_usd) / nav_usd * 100
         ok = after_pct <= s.max_sector_pct

@@ -115,6 +115,7 @@ export interface Position {
   last_price: number;
   listing_exchange: string;
   data_symbol: string;
+  excluded: boolean;
   market_value: number;
   unrealized_pnl: number;
 }
@@ -259,6 +260,7 @@ export interface PositionInput {
   avg_cost: number;
   last_price: number;
   data_symbol?: string;
+  excluded?: boolean;
 }
 
 export interface UserInput {
