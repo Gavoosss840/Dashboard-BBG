@@ -144,7 +144,7 @@ export interface PortfolioReport {
   currency: string;
   nav_series: NavPoint[];
   metrics: ReportMetrics | null;
-  included: { id: number; ticker: string; name: string; value: number; weight: number }[];
+  included: { id: number; ticker: string; name: string; value: number; weight: number; modeled?: boolean }[];
   skipped: { id: number; ticker: string; name: string; reason: string }[];
 }
 

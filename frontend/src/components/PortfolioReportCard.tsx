@@ -25,13 +25,11 @@ function ratio(v: number | null | undefined): string {
 /** Report on a chosen subset of positions: tick lines to include, and NAV,
  * return, vol, Sharpe... recompute from those positions' real price history. */
 export function PortfolioReportCard({ positions }: { positions: Position[] }) {
-  // Default selection: everything currently counted (not excluded), that isn't a
-  // derivative we can't price historically.
+  // Default selection: everything currently counted (not excluded via the
+  // position's toggle). Options are included too — the engine reconstructs them
+  // via a Black-76 model, and flags them as modeled.
   const defaultSelected = useMemo(
-    () =>
-      new Set(
-        positions.filter((p) => !p.excluded && p.asset_class !== "option" && p.asset_class !== "future").map((p) => p.id)
-      ),
+    () => new Set(positions.filter((p) => !p.excluded).map((p) => p.id)),
     [positions]
   );
   const [selected, setSelected] = useState<Set<number>>(defaultSelected);
@@ -136,15 +134,22 @@ export function PortfolioReportCard({ positions }: { positions: Position[] }) {
                 <div className="mb-3 text-sm text-[var(--text-muted)]">Historique insuffisant pour les métriques.</div>
               )}
               <NavChart data={report.nav_series} ccy={report.currency} />
+              {report.included.some((i) => i.modeled) && (
+                <div className="mt-2 text-xs text-[var(--text-muted)]">
+                  <span className="rounded bg-[var(--series-1)]/15 px-1 text-[var(--series-1)]">modélisé (Black-76)</span>{" "}
+                  {report.included.filter((i) => i.modeled).map((i) => i.ticker).join(", ")} — valeur d'option reconstruite
+                  depuis le sous-jacent réel (pas de prix d'option historique gratuit).
+                </div>
+              )}
               {report.skipped.length > 0 && (
                 <div className="mt-2 text-xs text-[var(--text-muted)]">
-                  Exclu(s) du calcul (pas d'historique de prix) :{" "}
+                  Exclu(s) du calcul :{" "}
                   {report.skipped.map((s) => `${s.ticker} (${s.reason})`).join(", ")}.
                 </div>
               )}
               <div className="mt-1 text-[10px] text-[var(--text-muted)]">
-                Simulation à partir des prix historiques quotidiens (Yahoo) et des quantités actuelles — Sharpe/Sortino avec taux
-                sans risque à 0.
+                Simulation à partir des prix historiques quotidiens (Yahoo / Black-76 pour les options) et des quantités
+                actuelles — Sharpe/Sortino avec taux sans risque à 0.
               </div>
             </>
           )}

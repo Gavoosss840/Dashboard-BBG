@@ -22,7 +22,9 @@ import datetime as dt
 from sqlalchemy.orm import Session
 
 from app import models
-from app.services import fx, securities
+from app.services import fx, options, securities
+
+RISK_FREE = 0.04  # annual, for the Black-76 option model
 
 # Report period -> the Yahoo chart range that covers it.
 PERIOD_RANGES = {
@@ -48,6 +50,45 @@ def _daily_closes(symbol: str, range_key: str) -> dict[dt.date, float]:
         d = dt.datetime.utcfromtimestamp(pt["t"]).date()
         out[d] = c / 100.0 if pence else c
     return out
+
+
+def _option_value_series(
+    pos: models.Position, range_key: str, cutoff: dt.date, target_ccy: str, rates: dict
+) -> dict[dt.date, float] | None:
+    """Black-76 mark-to-model value series for an option, off the underlying's
+    real daily history. None if the underlying can't be mapped/priced.
+    """
+    if not (pos.opt_strike and pos.opt_expiry and pos.opt_right and pos.underlying_symbol):
+        return None
+    yahoo_und = options.yahoo_underlying(pos.underlying_symbol)
+    if not yahoo_und:
+        return None
+    und = _daily_closes(yahoo_und, range_key)
+    if not und:
+        return None
+    K, right, expiry = pos.opt_strike, pos.opt_right, pos.opt_expiry
+    mult = pos.multiplier or 1.0
+    today = dt.date.today()
+
+    # Calibrate implied vol to the option's current observed mark, so the model
+    # line coincides with reality today, then hold it across the window.
+    f_now = und[max(und)]
+    t_now = max((expiry - today).days, 1) / 365.0
+    sigma = options.implied_vol(pos.last_price, f_now, K, t_now, RISK_FREE, right)
+    if sigma is None:
+        sigma = 0.35  # crude-oil-ish fallback if the mark is at/under intrinsic
+
+    fx1 = fx.convert(1.0, pos.currency, target_ccy, rates)
+    out: dict[dt.date, float] = {}
+    for d, f in und.items():
+        if d < cutoff:
+            continue
+        t = (expiry - d).days / 365.0
+        if t <= 0:
+            continue
+        price = options.black76(f, K, t, sigma, RISK_FREE, right)
+        out[d] = pos.quantity * price * mult * fx1
+    return out or None
 
 
 def _cutoff(period: str, today: dt.date) -> dt.date:
@@ -88,27 +129,42 @@ def build_report(
     series_by_pos: dict[int, dict[dt.date, float]] = {}
 
     for pos in positions:
-        symbol = pos.data_symbol or pos.ticker
-        closes = _daily_closes(symbol, range_key) if symbol else {}
-        # Options/futures and anything Yahoo can't price historically: no series.
-        if not closes or pos.asset_class in ("option", "future"):
-            skipped.append({
-                "id": pos.id, "ticker": pos.ticker, "name": pos.name,
-                "reason": "Pas d'historique de prix disponible" if not closes else "Instrument dérivé",
-            })
-            continue
         mult = pos.multiplier or 1.0
-        values = {
-            d: pos.quantity * c * mult * fx.convert(1.0, pos.currency, target_ccy, rates)
-            for d, c in closes.items() if d >= cutoff
-        }
+        modeled = False
+
+        if pos.asset_class in ("option", "future") or pos.opt_right:
+            # No free historical option feed: reconstruct via Black-76 off the
+            # underlying future's real history (flagged "modeled").
+            values = _option_value_series(pos, range_key, cutoff, target_ccy, rates)
+            if values is None:
+                skipped.append({
+                    "id": pos.id, "ticker": pos.ticker, "name": pos.name,
+                    "reason": "Option sans sous-jacent modélisable",
+                })
+                continue
+            modeled = True
+        else:
+            symbol = pos.data_symbol or pos.ticker
+            closes = _daily_closes(symbol, range_key) if symbol else {}
+            if not closes:
+                skipped.append({
+                    "id": pos.id, "ticker": pos.ticker, "name": pos.name,
+                    "reason": "Pas d'historique de prix disponible",
+                })
+                continue
+            values = {
+                d: pos.quantity * c * mult * fx.convert(1.0, pos.currency, target_ccy, rates)
+                for d, c in closes.items() if d >= cutoff
+            }
+
         if not values:
             skipped.append({"id": pos.id, "ticker": pos.ticker, "name": pos.name,
                             "reason": "Historique trop court"})
             continue
         series_by_pos[pos.id] = values
         cur_val = fx.convert(pos.quantity * pos.last_price * mult, pos.currency, target_ccy, rates)
-        included.append({"id": pos.id, "ticker": pos.ticker, "name": pos.name, "value": cur_val})
+        included.append({"id": pos.id, "ticker": pos.ticker, "name": pos.name,
+                         "value": cur_val, "modeled": modeled})
 
     if not series_by_pos:
         return {

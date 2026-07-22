@@ -130,6 +130,15 @@ class Position(Base):
     # is carried over when positions are replaced), unlike a plain delete which
     # the next sync would undo.
     excluded: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Option/derivative contract terms (from the IBKR Flex OpenPosition). They
+    # let the report engine reconstruct an option's historical value with a
+    # Black-76 model off the underlying's real price history, since no free feed
+    # carries historical option prices. underlying_symbol is IBKR's (e.g.
+    # "MCLU6"); the engine maps it to a Yahoo futures symbol.
+    opt_strike: Mapped[float | None] = mapped_column(Float, nullable=True)
+    opt_expiry: Mapped[dt.date | None] = mapped_column(Date, nullable=True)
+    opt_right: Mapped[str] = mapped_column(String(4), default="")  # "P" or "C"
+    underlying_symbol: Mapped[str] = mapped_column(String(30), default="")
 
     portfolio: Mapped["Portfolio"] = relationship(back_populates="positions")
 

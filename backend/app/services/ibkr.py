@@ -351,6 +351,11 @@ def import_flex(xml_text: str, db: Session) -> dict:
                 # and ETFs to a Yahoo data symbol.
                 asset_cat = _attr(op, "assetCategory").upper().split()[0] if _attr(op, "assetCategory") else ""
                 data_symbol = _yahoo_symbol(ib_symbol, listing_exchange) if asset_cat in ("STK", "ETF", "") else ""
+                # Option/future-option contract terms, for the report's Black-76
+                # historical reconstruction (no free feed carries historical
+                # option prices, so we model from the underlying).
+                is_option = asset_cat in ("OPT", "FOP")
+                right = _attr(op, "putCall", "put/Call").upper()[:1] if is_option else ""
                 db.add(models.Position(
                     portfolio_id=portfolio.id,
                     ticker=ib_symbol,
@@ -366,6 +371,10 @@ def import_flex(xml_text: str, db: Session) -> dict:
                     listing_exchange=listing_exchange,
                     data_symbol=data_symbol,
                     excluded=(portfolio.id, ib_symbol, _attr(op, "currency", default="USD")) in excluded_keys,
+                    opt_strike=_num(op, "strike") if is_option else None,
+                    opt_expiry=_date(_attr(op, "expiry", "expirationDate")) if is_option else None,
+                    opt_right=right if right in ("P", "C") else "",
+                    underlying_symbol=_attr(op, "underlyingSymbol") if is_option else "",
                 ))
                 stats["positions"] += 1
 
