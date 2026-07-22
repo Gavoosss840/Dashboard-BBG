@@ -86,6 +86,7 @@ export function ClientDetailPage() {
     const out: Record<string, number> = {};
     for (const p of data.portfolios) {
       for (const pos of p.positions) {
+        if (pos.excluded) continue; // excluded positions are out of every analytic
         out[pos.asset_class] = (out[pos.asset_class] ?? 0) + pos.market_value;
       }
     }
