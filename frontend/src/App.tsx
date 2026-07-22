@@ -4,6 +4,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { ClientsPage } from "./pages/ClientsPage";
 import { ClientDetailPage } from "./pages/ClientDetailPage";
+import { ReportBuilderPage } from "./pages/ReportBuilderPage";
 import { PortfolioPage } from "./pages/PortfolioPage";
 import { FinancierPage } from "./pages/FinancierPage";
 import { CompliancePage } from "./pages/CompliancePage";
@@ -43,6 +44,7 @@ function App() {
         <Route path="/" element={<DashboardPage />} />
         <Route path="/clients" element={<ClientsPage />} />
         <Route path="/clients/:id" element={<ClientDetailPage />} />
+        <Route path="/reports" element={<ReportBuilderPage />} />
         <Route path="/portfolio" element={<PortfolioPage />} />
         <Route path="/financier" element={<FinancierPage />} />
         <Route path="/compliance" element={<CompliancePage />} />

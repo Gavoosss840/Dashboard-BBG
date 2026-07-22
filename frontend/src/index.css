@@ -82,3 +82,16 @@ table td:not(:last-child) {
 ::-webkit-scrollbar-track {
   background: var(--surface-0);
 }
+
+/* Print: strip the app chrome and controls so a client report prints clean. */
+@media print {
+  [data-print="hide"] { display: none !important; }
+  main { overflow: visible !important; padding: 0 !important; }
+  html, body { height: auto !important; overflow: visible !important; background: #fff !important; }
+  .report-print-area { color: #111 !important; }
+  .report-print-area .report-card {
+    break-inside: avoid;
+    border: 1px solid #ddd !important;
+    background: #fff !important;
+  }
+}

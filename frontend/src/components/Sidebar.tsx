@@ -11,6 +11,7 @@ const SECTIONS: { label: string; items: { to: string; label: string; adminOnly?:
     items: [
       { to: "/clients", label: "Clients" },
       { to: "/portfolio", label: "Portfolio" },
+      { to: "/reports", label: "Report client" },
     ],
   },
   {
