@@ -26,6 +26,7 @@ import type {
   NewsItem,
   Portfolio,
   PortfolioInput,
+  PortfolioReport,
   Position,
   PositionInput,
   ReferenceEntry,
@@ -267,6 +268,11 @@ export const api = {
     request<Record<string, Record<string, number | string | null>>>(
       `/api/securities/metrics?symbols=${encodeURIComponent(symbols.join(","))}`
     ),
+  portfolioReport: (positionIds: number[], period: string) =>
+    request<PortfolioReport>(`/api/reports/portfolio`, {
+      method: "POST",
+      body: JSON.stringify({ position_ids: positionIds, period }),
+    }),
   securityQuote: (symbol: string) => request<SecurityQuote>(`/api/securities/${encodeURIComponent(symbol)}/quote`),
   securityChart: (symbol: string, range: string) =>
     request<SecurityChart>(`/api/securities/${encodeURIComponent(symbol)}/chart?range=${range}`),

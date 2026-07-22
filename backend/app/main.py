@@ -25,6 +25,7 @@ from app.routers import (
     market,
     portfolios,
     reference,
+    reports,
     risk,
     securities,
     sync,
@@ -203,6 +204,7 @@ app.include_router(sync.router)
 app.include_router(audit.router)
 app.include_router(securities.router)
 app.include_router(risk.router)
+app.include_router(reports.router)
 
 
 @app.get("/api/health")

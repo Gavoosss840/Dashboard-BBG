@@ -125,6 +125,29 @@ export interface NavPoint {
   nav: number;
 }
 
+export interface ReportMetrics {
+  start_nav: number;
+  end_nav: number;
+  total_return: number;
+  annualised_return: number;
+  annualised_vol: number;
+  sharpe: number | null;
+  sortino: number | null;
+  max_drawdown: number;
+  best_day: number;
+  worst_day: number;
+  observations: number;
+}
+
+export interface PortfolioReport {
+  period: string;
+  currency: string;
+  nav_series: NavPoint[];
+  metrics: ReportMetrics | null;
+  included: { id: number; ticker: string; name: string; value: number; weight: number }[];
+  skipped: { id: number; ticker: string; name: string; reason: string }[];
+}
+
 export interface CashBalance {
   currency: string;
   amount: number;

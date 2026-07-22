@@ -22,6 +22,7 @@ import { RecurringContributionForm } from "../components/forms/RecurringContribu
 import { formatDate, formatMoney, formatNumber, formatPct } from "../lib/format";
 import { MetricColumnPicker, useMetrics, useMetricColumns } from "../components/MetricColumns";
 import { METRIC_BY_KEY, formatMetric } from "../lib/metrics";
+import { PortfolioReportCard } from "../components/PortfolioReportCard";
 import type {
   CashFlow,
   CashFlowInput,
@@ -631,6 +632,10 @@ export function ClientDetailPage() {
           <PortfolioTrades portfolioId={p.id} />
         </Card>
       ))}
+
+      {data.portfolios.some((p) => p.positions.length > 0) && (
+        <PortfolioReportCard positions={data.portfolios.flatMap((p) => p.positions)} />
+      )}
 
       <Modal open={modal?.type === "editClient"} onClose={() => setModal(null)} title="Modifier le client" wide>
         <ClientForm initial={data} users={users.data ?? []} onSubmit={handleUpdateClient} onCancel={() => setModal(null)} />
