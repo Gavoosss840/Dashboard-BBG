@@ -40,6 +40,22 @@ def _verdict(upside_pct: float, threshold: float) -> str:
     return "fair"
 
 
+# A single model off noisy Yahoo fundamentals occasionally spits out an absurd
+# figure (e.g. a Graham number on a holding company's investment-gain-inflated
+# EPS → 7× price). Bound every component to a sane band around the price before
+# blending, so one bad input can't hijack the verdict.
+_SANE_LOW = 0.25
+_SANE_HIGH = 4.0
+
+
+def _clamp_components(components: list[dict], price: float) -> None:
+    lo, hi = price * _SANE_LOW, price * _SANE_HIGH
+    for c in components:
+        fv = c.get("fair_value")
+        if fv is not None:
+            c["fair_value"] = max(lo, min(fv, hi))
+
+
 def compute_taurus_valuation(
     price: float,
     fundamentals: dict,
@@ -72,13 +88,36 @@ def compute_taurus_valuation(
         fcf=h.get("free_cashflow") or 0.0,
         sector=prof.get("sector") or "Unknown",
         sigma_equity=sigma_equity or taurus.DEFAULT_SIGMA_EQUITY,
+        beta_levered=v.get("beta"),
+        growth=p.get("revenue_growth"),
     )
     if mm is None:
         return None
 
     divergence = mm["divergence_pct"]
-    fair_value = price * (1 + divergence / 100.0)
-    threshold = taurus.LEVERAGE_GAP_THRESHOLD * 100  # 25%
+    mm_fair = price * (1 + divergence / 100.0)
+
+    # BLEND, don't let MM stand alone. An absolute intrinsic model off trailing
+    # Yahoo fundamentals systematically flags high-multiple growth names as
+    # deeply over-valued — presenting "AMZN −70%" as the verdict looked like a
+    # gross error. The MM value is the fundamental anchor (moderate weight); the
+    # market-anchored components (analyst target, Graham, PEG, DCF) keep the
+    # blended fair value tethered to reality.
+    mm_component = {
+        "key": "mm",
+        "label": "Valeur capital-structure (Taurus MM)",
+        "fair_value": mm_fair,
+        "weight": 0.30,
+        "detail": "Modigliani-Miller: VU indépendant + bouclier fiscal − détresse − agence, ramené aux capitaux propres",
+    }
+    components = [mm_component] + _standard_components(price, fundamentals)
+    _clamp_components(components, price)
+    total_weight = sum(c["weight"] for c in components)
+    fair_value = sum(c["fair_value"] * c["weight"] for c in components) / total_weight
+    upside_pct = (fair_value / price - 1) * 100
+    for c in components:
+        c["upside_pct"] = (c["fair_value"] / price - 1) * 100
+    threshold = UNDERVALUED_THRESHOLD  # ±15% on the blended value
 
     momentum = taurus.vol_adjusted_momentum(momentum_closes) if momentum_closes else None
 
@@ -92,20 +131,11 @@ def compute_taurus_valuation(
         "model": "taurus",
         "fair_value": fair_value,
         "price": price,
-        "upside_pct": divergence,
-        "verdict": _verdict(divergence, threshold),
+        "upside_pct": upside_pct,
+        "verdict": _verdict(upside_pct, threshold),
         "threshold_pct": threshold,
         "confidence": confidence,
-        "components": [
-            {
-                "key": "mm",
-                "label": "Valeur théorique MM (Taurus)",
-                "fair_value": fair_value,
-                "weight": 1.0,
-                "detail": "Modigliani-Miller: VE − coûts de détresse − coûts d'agence",
-                "upside_pct": divergence,
-            }
-        ],
+        "components": components,
         "taurus": {
             "vl_theoretical": mm["vl_theoretical"],
             "market_cap": market_cap,
@@ -205,6 +235,7 @@ def _standard_valuation(price: float, fundamentals: dict) -> dict | None:
     components = _standard_components(price, fundamentals)
     if not components:
         return None
+    _clamp_components(components, price)
     total_weight = sum(c["weight"] for c in components)
     fair_value = sum(c["fair_value"] * c["weight"] for c in components) / total_weight
     upside_pct = (fair_value / price - 1) * 100

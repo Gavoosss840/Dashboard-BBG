@@ -78,6 +78,8 @@ def mm_valuation(
     fcf: float,
     sector: str,
     sigma_equity: float,
+    beta_levered: float | None = None,
+    growth: float | None = None,
     rf: float = RISK_FREE_RATE_ANNUAL,
     return_df: float | None = RETURN_DF,
 ) -> dict | None:
@@ -114,8 +116,36 @@ def mm_valuation(
     shield_discount = rf + spread
     pv_tax_shield = annual_tax_shield / shield_discount if shield_discount > 0 else 0.0
 
-    # 2. Unlevered value
-    vu = market_cap + net_debt - pv_tax_shield
+    # 2. Unlevered value VU — computed INDEPENDENTLY, not backed out of the
+    #    market cap. The previous port set VU = market_cap + net_debt − shield,
+    #    which is circular: VL then collapsed to market_cap + net_debt − frictions
+    #    and the "divergence" (VL vs equity market_cap) was really just
+    #    net_debt / market_cap — a leverage artefact that valued any indebted
+    #    firm as wildly undervalued (fair value 2-3× price). Instead: de-lever the
+    #    equity beta to an asset beta, get an unlevered cost of capital, and
+    #    capitalise the unlevered cash flow (FCFF, else EBIT after tax).
+    equity_risk_premium = 0.05
+    bl = float(beta_levered) if beta_levered and beta_levered > 0 else 1.0
+    de_market = net_debt / max(market_cap, 1.0)
+    beta_asset = bl / (1.0 + (1.0 - tax_rate) * de_market)
+    r_u = min(max(rf + beta_asset * equity_risk_premium, 0.06), 0.20)
+    unlevered_cf = fcf if fcf > 0 else (ebit * (1.0 - tax_rate) if ebit > 0 else 0.0)
+    if unlevered_cf <= 0:
+        return None  # no independent valuation anchor → caller uses the standard blend
+    # Two-stage DCF: a single Gordon-growth perpetuity capped at ~4% crushes
+    # high-growth names (their cash flow is modest vs a market cap that prices in
+    # years of growth). Grow the unlevered cash flow at the near-term rate for a
+    # 5-year window, then fade to a terminal 2.5%.
+    g1 = min(max(float(growth) if growth is not None else 0.04, 0.0), 0.25)
+    g_terminal = 0.025
+    horizon = 5
+    cf = unlevered_cf
+    vu = 0.0
+    for yr in range(1, horizon + 1):
+        cf *= 1.0 + g1
+        vu += cf / (1.0 + r_u) ** yr
+    terminal = cf * (1.0 + g_terminal) / (r_u - g_terminal)
+    vu += terminal / (1.0 + r_u) ** horizon
 
     # 3. Financial distress costs via the Merton default model
     E = max(market_cap, 1.0)
@@ -145,9 +175,20 @@ def mm_valuation(
         agency_score += (fcf_yield - 0.10) * 0.5
     pv_agency = agency_score * market_cap
 
-    # 5. Levered theoretical value & divergence
-    vl = vu + pv_tax_shield - pv_distress - pv_agency
-    divergence_pct = (vl - market_cap) / market_cap * 100.0
+    # 5. Levered theoretical FIRM value, then EQUITY value & divergence.
+    #    VL is a firm (enterprise) value; to compare with the equity market cap we
+    #    subtract net debt. Comparing VL directly to market_cap (the old bug) is
+    #    apples-to-oranges and always off by ~net_debt.
+    vl_firm = vu + pv_tax_shield - pv_distress - pv_agency
+    theoretical_equity = vl_firm - net_debt
+    if theoretical_equity <= 0:
+        return None
+    divergence_pct = (theoretical_equity - market_cap) / market_cap * 100.0
+    # Sanity clamp: a single-point MM estimate off noisy Yahoo fundamentals gets
+    # unstable at the tails; bound the verdict so a bad input can't produce a
+    # 300% "fair value".
+    divergence_pct = max(min(divergence_pct, 70.0), -70.0)
+    vl = theoretical_equity  # reported as the theoretical equity value
 
     # interest coverage guard (forces overleveraged/SHORT when thin)
     ic_ratio = ebit / interest_expense if interest_expense > 0 else float("inf")

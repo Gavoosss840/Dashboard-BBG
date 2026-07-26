@@ -101,6 +101,7 @@ def _legs_for(symbol: str, region: str) -> dict | None:
                 tax_rate=taurus.DEFAULT_TAX_RATE, fcf=h.get("free_cashflow") or 0.0,
                 sector=prof.get("sector") or "Unknown",
                 sigma_equity=sigma or taurus.DEFAULT_SIGMA_EQUITY,
+                beta_levered=v.get("beta"), growth=p.get("revenue_growth"),
             )
             if mm:
                 divergence = mm["divergence_pct"]
@@ -149,6 +150,7 @@ def signal_for(symbol: str, currency: str) -> dict | None:
                 tax_rate=taurus.DEFAULT_TAX_RATE, fcf=h.get("free_cashflow") or 0.0,
                 sector=prof.get("sector") or "Unknown",
                 sigma_equity=sigma or taurus.DEFAULT_SIGMA_EQUITY,
+                beta_levered=v.get("beta"), growth=p.get("revenue_growth"),
             )
             if mm:
                 divergence = mm["divergence_pct"]
