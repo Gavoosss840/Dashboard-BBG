@@ -759,6 +759,34 @@ export interface TaurusSignal {
   composite: TaurusComposite;
 }
 
+export interface MomentumSignal {
+  symbol: string;
+  score: number;
+  verdict: "fort" | "positif" | "neutre" | "négatif" | "faible";
+  crash_risk: "faible" | "modéré" | "élevé" | "inconnu";
+  components: {
+    jt_long_12_1: number | null;
+    jt_short_6_1: number | null;
+    reversal_1m: number | null;
+    residual_momentum: number | null;
+    sharpe_momentum: number | null;
+    vol_scaled_momentum: number | null;
+    vol_scale_factor: number | null;
+    realized_vol: number | null;
+    target_vol: number;
+  };
+  ff: {
+    model: string | null;
+    alpha_annual: number | null;
+    alpha_tstat: number | null;
+    market_beta: number | null;
+    umd_beta: number | null;
+    significant: boolean | null;
+    region: string;
+  };
+  legs: { key: string; score: number; weight: number }[];
+}
+
 export interface Valuation {
   model: "standard" | "taurus";
   fair_value: number;

@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app import models
 from app.database import get_db
+from app.services import momentum as momentum_service
 from app.services import securities, taurus_universe, valuation
 
 router = APIRouter(prefix="/api/securities", tags=["securities"])
@@ -96,6 +97,23 @@ def taurus_signal(symbol: str):
             detail="Signal Taurus indisponible pour cet instrument (indice, ETF, ou historique insuffisant).",
         )
     return signal
+
+
+@router.get("/{symbol}/momentum")
+def momentum_signal(symbol: str):
+    """Composite momentum: FF5/6 factor context, Jegadeesh-Titman long/short,
+    residual (factor-adjusted) momentum, risk-adjusted (Sharpe) momentum, and
+    volatility-scaled/crash-protected momentum, blended into one score."""
+    quote = securities.fetch_quote(symbol)
+    if quote is None:
+        raise HTTPException(status_code=404, detail=f"Titre introuvable: {symbol}")
+    sig = momentum_service.momentum_signal(symbol, quote["currency"])
+    if sig is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Signal momentum indisponible (indice/ETF ou historique de prix insuffisant).",
+        )
+    return sig
 
 
 @router.get("/{symbol}/overview")

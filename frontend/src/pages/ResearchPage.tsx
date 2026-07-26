@@ -12,6 +12,7 @@ import { PageHeader } from "../components/ui/PageHeader";
 import { LoadingState, ErrorState } from "../components/ui/States";
 import { ValuationCard } from "../components/ValuationCard";
 import { TaurusSignalCard } from "../components/TaurusSignalCard";
+import { MomentumSignalCard } from "../components/MomentumSignalCard";
 import { formatNumber, formatPct } from "../lib/format";
 
 function compactNumber(v: number): string {
@@ -439,6 +440,9 @@ export function ResearchPage() {
 
           {/* ---- Taurus composite signal (full strategy: alpha + MM + momentum) ---- */}
           <TaurusSignalCard symbol={q.symbol} />
+
+          {/* ---- Composite momentum indicator ---- */}
+          <MomentumSignalCard symbol={q.symbol} />
         </div>
       )}
     </div>

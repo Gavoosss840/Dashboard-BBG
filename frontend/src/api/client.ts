@@ -40,6 +40,7 @@ import type {
   SecuritySearchResult,
   SyncLog,
   TaurusSignal,
+  MomentumSignal,
   SyncStatus,
   TapeQuote,
   Trade,
@@ -280,6 +281,8 @@ export const api = {
     request<SecurityOverview>(`/api/securities/${encodeURIComponent(symbol)}/overview`),
   taurusSignal: (symbol: string) =>
     request<TaurusSignal>(`/api/securities/${encodeURIComponent(symbol)}/taurus-signal`),
+  momentumSignal: (symbol: string) =>
+    request<MomentumSignal>(`/api/securities/${encodeURIComponent(symbol)}/momentum`),
 
   riskSettings: () => request<RiskSettings>(`/api/risk/settings`),
   updateRiskSettings: (payload: Partial<RiskSettings>) =>
