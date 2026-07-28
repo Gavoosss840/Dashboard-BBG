@@ -41,6 +41,7 @@ import type {
   SyncLog,
   TaurusSignal,
   MomentumSignal,
+  SecurityNote,
   SyncStatus,
   TapeQuote,
   Trade,
@@ -283,6 +284,15 @@ export const api = {
     request<TaurusSignal>(`/api/securities/${encodeURIComponent(symbol)}/taurus-signal`),
   momentumSignal: (symbol: string) =>
     request<MomentumSignal>(`/api/securities/${encodeURIComponent(symbol)}/momentum`),
+  securityNotes: (symbol: string) =>
+    request<SecurityNote[]>(`/api/securities/${encodeURIComponent(symbol)}/notes`),
+  createSecurityNote: (symbol: string, body: string) =>
+    request<SecurityNote>(`/api/securities/${encodeURIComponent(symbol)}/notes`, {
+      method: "POST",
+      body: JSON.stringify({ body }),
+    }),
+  deleteSecurityNote: (noteId: number) =>
+    request<void>(`/api/securities/notes/${noteId}`, { method: "DELETE" }),
 
   riskSettings: () => request<RiskSettings>(`/api/risk/settings`),
   updateRiskSettings: (payload: Partial<RiskSettings>) =>

@@ -19,6 +19,7 @@ import { Card } from "../components/ui/Card";
 import { LoadingState, ErrorState } from "../components/ui/States";
 import { ValuationCard } from "../components/ValuationCard";
 import { MomentumSignalCard } from "../components/MomentumSignalCard";
+import { SecurityNotesCard } from "../components/SecurityNotesCard";
 import { formatNumber, formatPct } from "../lib/format";
 
 const QUOTE_POLL_MS = 15_000;
@@ -637,6 +638,9 @@ export function SecurityPage() {
 
       {/* ---- Composite momentum indicator ---- */}
       <MomentumSignalCard symbol={quote.symbol} />
+
+      {/* ---- Analyst research notes (persistent per security) ---- */}
+      <SecurityNotesCard symbol={quote.symbol} />
 
       {/* ---- Ratios ---- */}
       {f && <RatiosCard f={f} currency={quote.currency} />}

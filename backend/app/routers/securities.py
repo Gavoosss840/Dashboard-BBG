@@ -1,8 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
-from app import models
+from app import models, schemas
 from app.database import get_db
 from app.services import momentum as momentum_service
 from app.services import securities, taurus_universe, valuation
@@ -183,3 +183,59 @@ def security_overview(symbol: str, db: Session = Depends(get_db)):
         "in_watchlist": watch is not None,
         "watchlist_item_id": watch.id if watch else None,
     }
+
+
+# ---------- Research notes (per security) ----------
+def _current_user(request: Request, db: Session) -> models.User | None:
+    """Best-effort author attribution — notes stay usable even if the request
+    carries no authenticated user."""
+    user_id = getattr(request.state, "user_id", None)
+    if user_id is None:
+        return None
+    return db.query(models.User).filter(models.User.id == int(user_id)).first()
+
+
+@router.get("/{symbol}/notes", response_model=list[schemas.SecurityNoteOut])
+def list_security_notes(symbol: str, db: Session = Depends(get_db)):
+    """Analyst research log for a security, newest first. Keyed by the display
+    symbol so notes persist across visits and resyncs."""
+    key = symbol.strip().upper()
+    return (
+        db.query(models.SecurityNote)
+        .filter(func.upper(models.SecurityNote.symbol) == key)
+        .order_by(models.SecurityNote.created_at.desc())
+        .all()
+    )
+
+
+@router.post("/{symbol}/notes", response_model=schemas.SecurityNoteOut, status_code=201)
+def create_security_note(
+    symbol: str,
+    body: schemas.SecurityNoteCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    text = body.body.strip()
+    if not text:
+        raise HTTPException(status_code=422, detail="La note ne peut pas être vide.")
+    user = _current_user(request, db)
+    note = models.SecurityNote(
+        symbol=symbol.strip().upper(),
+        body=text,
+        author_id=user.id if user else None,
+        author_name=user.name if user else "",
+    )
+    db.add(note)
+    db.commit()
+    db.refresh(note)
+    return note
+
+
+@router.delete("/notes/{note_id}", status_code=204)
+def delete_security_note(note_id: int, db: Session = Depends(get_db)):
+    note = db.query(models.SecurityNote).filter(models.SecurityNote.id == note_id).first()
+    if note is None:
+        raise HTTPException(status_code=404, detail="Note introuvable.")
+    db.delete(note)
+    db.commit()
+    return None

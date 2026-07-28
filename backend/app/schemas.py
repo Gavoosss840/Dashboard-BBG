@@ -644,3 +644,17 @@ class DashboardOut(ORMBase):
     pending_fees: float
     upcoming_earnings: int
     open_crm_leads: int
+
+
+# ---------- Security research notes ----------
+class SecurityNoteCreate(BaseModel):
+    body: str
+
+
+class SecurityNoteOut(ORMBase):
+    id: int
+    symbol: str
+    body: str
+    author_id: int | None = None
+    author_name: str = ""
+    created_at: dt.datetime

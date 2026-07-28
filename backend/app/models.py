@@ -230,6 +230,21 @@ class WatchlistItem(Base):
     added_by: Mapped["User"] = relationship()
 
 
+class SecurityNote(Base):
+    """A free-text research note pinned to a security's symbol, so an analyst's
+    observations persist on the security page across visits. Multiple timestamped
+    entries per symbol, authored by the user who wrote them."""
+
+    __tablename__ = "security_notes"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(30), index=True)
+    body: Mapped[str] = mapped_column(Text)
+    author_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    author_name: Mapped[str] = mapped_column(String(160), default="")
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=dt.datetime.utcnow)
+
+
 class NewsItem(Base):
     __tablename__ = "news_items"
 

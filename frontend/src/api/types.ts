@@ -787,6 +787,15 @@ export interface MomentumSignal {
   legs: { key: string; score: number; weight: number }[];
 }
 
+export interface SecurityNote {
+  id: number;
+  symbol: string;
+  body: string;
+  author_id: number | null;
+  author_name: string;
+  created_at: string;
+}
+
 export interface Valuation {
   model: "standard" | "taurus";
   fair_value: number;
