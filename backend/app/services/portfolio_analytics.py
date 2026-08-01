@@ -233,6 +233,78 @@ def _frontier(mu: np.ndarray, cov: np.ndarray, rf: float) -> dict | None:
 
 
 # --------------------------------------------------------------------------
+# Return context (reused by the candidate screener)
+# --------------------------------------------------------------------------
+def portfolio_return_context(
+    positions: list[models.Position], period: str, target_ccy: str, rates: dict
+) -> dict | None:
+    """The current book's daily return series and its Sharpe, plus the price
+    date axis — the inputs a Treynor-Black security-selection screen needs.
+
+    Returns None when fewer than two usable equity lines have common history.
+    """
+    usable: list[tuple[str, float]] = []
+    held: set[str] = set()
+    for pos in positions:
+        sym = (pos.data_symbol or pos.ticker or "").strip()
+        if not sym or pos.excluded:
+            continue
+        if pos.opt_right or pos.opt_strike or pos.asset_class in ("option", "future", "fx", "cash"):
+            continue
+        mv = fx.convert(
+            pos.quantity * pos.last_price * (pos.multiplier or 1.0),
+            pos.currency, target_ccy, rates,
+        )
+        usable.append((sym, mv))
+        held.add(sym.upper())
+    if len(usable) < 1:
+        return None
+
+    by_symbol: dict[str, float] = {}
+    for sym, mv in usable:
+        by_symbol[sym] = by_symbol.get(sym, 0.0) + mv
+    symbols = list(by_symbol.keys())
+
+    # Price axis: intersection of the holdings' dates.
+    closes: dict[str, dict[dt.date, float]] = {}
+    for s in symbols:
+        series = reports._daily_closes(s, period)
+        if len(series) >= _MIN_OBS + 1:
+            closes[s] = series
+    if not closes:
+        return None
+    common: set[dt.date] | None = None
+    for series in closes.values():
+        ks = set(series.keys())
+        common = ks if common is None else (common & ks)
+    if not common or len(common) < _MIN_OBS + 1:
+        return None
+    price_dates = sorted(common)
+
+    kept = list(closes.keys())
+    mv_vec = np.array([by_symbol[s] for s in kept], dtype=float)
+    net = mv_vec.sum()
+    gross = np.abs(mv_vec).sum()
+    basis = net if abs(net) > 0.2 * gross else gross
+    weights = mv_vec / basis if basis != 0 else np.full(len(kept), 1.0 / len(kept))
+
+    cols = []
+    for s in kept:
+        prices = np.array([_ffill(closes[s], price_dates, i) for i in range(len(price_dates))], dtype=float)
+        r = prices[1:] / prices[:-1] - 1.0
+        cols.append(np.nan_to_num(r, nan=0.0))
+    R = np.column_stack(cols)
+    port_ret = R @ weights
+    return {
+        "price_dates": price_dates,
+        "port_ret": port_ret,
+        "held": held,
+        "sharpe": _sharpe(port_ret),
+        "rf_daily": RISK_FREE / TRADING_DAYS,
+    }
+
+
+# --------------------------------------------------------------------------
 # Main entry
 # --------------------------------------------------------------------------
 def analyze_portfolio(

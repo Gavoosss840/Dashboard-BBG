@@ -861,6 +861,35 @@ export interface PortfolioAnalytics {
   skipped?: { ticker: string; reason: string; market_value: number }[];
 }
 
+export interface ScreenCandidate {
+  symbol: string;
+  market: string;
+  residual_alpha: number;
+  information_ratio: number;
+  beta_to_portfolio: number;
+  correlation: number;
+  ann_return: number;
+  ann_vol: number;
+  sharpe: number | null;
+  sharpe_uplift: number;
+  new_portfolio_sharpe: number;
+  observations: number;
+}
+
+export interface ScreenResult {
+  ok: boolean;
+  error?: string;
+  universe?: string;
+  universe_label?: string;
+  period?: string;
+  currency?: string;
+  portfolio_sharpe?: number | null;
+  held_count?: number;
+  screened?: number;
+  candidates_total?: number;
+  results?: ScreenCandidate[];
+}
+
 export interface SecurityNote {
   id: number;
   symbol: string;

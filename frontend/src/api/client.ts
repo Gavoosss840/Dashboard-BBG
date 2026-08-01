@@ -35,6 +35,7 @@ import type {
   RecurringContributionInput,
   RiskCheckResult,
   RiskSettings,
+  ScreenResult,
   SecurityChart,
   SecurityOverview,
   SecurityQuote,
@@ -249,6 +250,10 @@ export const api = {
   portfolioAnalytics: (portfolioId: number, ccy: string, period = "1y", benchmark = "^GSPC") =>
     request<PortfolioAnalytics>(
       `/api/portfolios/${portfolioId}/analytics?ccy=${ccy}&period=${period}&benchmark=${encodeURIComponent(benchmark)}`
+    ),
+  portfolioScreen: (portfolioId: number, universe: string, ccy: string, period = "1y", limit = 25) =>
+    request<ScreenResult>(
+      `/api/portfolios/${portfolioId}/screen?universe=${universe}&ccy=${ccy}&period=${period}&limit=${limit}`
     ),
 
   syncStatus: () => request<SyncStatus>(`/api/sync/status`),

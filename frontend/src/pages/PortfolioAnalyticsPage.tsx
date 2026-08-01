@@ -13,7 +13,7 @@ import {
   ZAxis,
 } from "recharts";
 import { api } from "../api/client";
-import type { AnalyticsAsset, PortfolioAnalytics } from "../api/types";
+import type { AnalyticsAsset, PortfolioAnalytics, ScreenCandidate } from "../api/types";
 import { Card } from "../components/ui/Card";
 import { ErrorState, LoadingState } from "../components/ui/States";
 import { useCurrency } from "../context/CurrencyContext";
@@ -130,6 +130,7 @@ export function PortfolioAnalyticsPage() {
             <FrontierChart data={data} />
             <SmlChart data={data} />
           </div>
+          <CandidateScreener portfolioId={portfolioId} currency={currency} period={period} />
           <AssetTable assets={data.assets ?? []} currency={currency} />
           <CorrelationMatrix corr={data.correlation} />
           {data.skipped && data.skipped.length > 0 && (
@@ -421,6 +422,156 @@ function AssetTable({ assets, currency }: { assets: AnalyticsAsset[]; currency: 
         Contribution au risque = part de la variance du portefeuille imputable à la ligne.
       </p>
     </Card>
+  );
+}
+
+// -------------------------------------------------------------------------
+const UNIVERSES = [
+  { key: "NASDAQ", label: "Nasdaq-100" },
+  { key: "SP500", label: "S&P 500" },
+  { key: "EUROPE", label: "Europe" },
+  { key: "ASIA", label: "Asie-Pacifique" },
+];
+
+function CandidateScreener({
+  portfolioId,
+  currency,
+  period,
+}: {
+  portfolioId: number;
+  currency: string;
+  period: string;
+}) {
+  const [universe, setUniverse] = useState("SP500");
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<import("../api/types").ScreenResult | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function run(uni: string) {
+    setUniverse(uni);
+    setLoading(true);
+    setErr(null);
+    setResult(null);
+    try {
+      const res = await api.portfolioScreen(portfolioId, uni, currency, period, 25);
+      if (!res.ok) setErr(res.error ?? "Screening indisponible.");
+      else setResult(res);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Erreur de screening.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Card
+      title="Screener — titres qui optimiseraient le portefeuille"
+      action={
+        <div className="flex flex-wrap gap-1">
+          {UNIVERSES.map((u) => (
+            <button
+              key={u.key}
+              onClick={() => run(u.key)}
+              disabled={loading}
+              className={`rounded border px-2.5 py-1 text-xs disabled:opacity-40 ${
+                universe === u.key && (result || loading)
+                  ? "border-[var(--series-1)] bg-[var(--series-1)] text-black"
+                  : "border-white/10 text-[var(--text-secondary)] hover:border-[var(--series-1)] hover:text-[var(--series-1)]"
+              }`}
+            >
+              {u.label}
+            </button>
+          ))}
+        </div>
+      }
+    >
+      {!result && !loading && !err && (
+        <div className="py-6 text-center text-sm text-[var(--text-muted)]">
+          Choisissez un univers pour scanner les titres qui amélioreraient la frontière efficiente
+          de ce portefeuille, classés par alpha résiduel (ratio d'information de Treynor-Black vs
+          votre book actuel). Période : {period}.
+        </div>
+      )}
+      {loading && (
+        <div className="py-6 text-center text-sm text-[var(--text-muted)]">
+          <LoadingState />
+          <div className="mt-2">Analyse de l'univers {UNIVERSES.find((u) => u.key === universe)?.label} en cours…</div>
+        </div>
+      )}
+      {err && <div className="py-4 text-sm text-[var(--status-warning)]">{err}</div>}
+
+      {result && result.results && result.results.length > 0 && (
+        <>
+          <div className="mb-2 text-xs text-[var(--text-muted)]">
+            {result.universe_label} · {result.results.length} titres retenus sur {result.screened}{" "}
+            analysés · Sharpe actuel du book {num(result.portfolio_sharpe ?? null)}. Un titre est
+            retenu s'il apporte un alpha résiduel positif ET améliore le Sharpe maximal
+            atteignable.
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-[10px] uppercase tracking-wide text-[var(--text-muted)]">
+                  <th className="py-1.5 pr-3">#</th>
+                  <th className="pr-3">Titre</th>
+                  <th className="px-2">Place</th>
+                  <th className="px-2 text-right">Alpha résiduel</th>
+                  <th className="px-2 text-right">Ratio d'info.</th>
+                  <th className="px-2 text-right">Gain Sharpe</th>
+                  <th className="px-2 text-right">→ Sharpe book</th>
+                  <th className="px-2 text-right">Corr.</th>
+                  <th className="px-2 text-right">β / book</th>
+                  <th className="px-2 text-right">Rdt ann.</th>
+                  <th className="px-2 text-right">Vol ann.</th>
+                </tr>
+              </thead>
+              <tbody>
+                {result.results.map((c, i) => (
+                  <ScreenRow key={c.symbol} rank={i + 1} c={c} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-2 text-[10px] text-[var(--text-muted)]">
+            Alpha résiduel = rendement non expliqué par l'exposition à ce que vous détenez déjà.
+            Ratio d'information (appraisal ratio) = alpha / risque idiosyncratique : ajouter un titre
+            porte le Sharpe maximal de S à √(S² + IR²). Titres déjà détenus exclus. Aide à la
+            décision — pas un conseil en investissement.
+          </p>
+        </>
+      )}
+      {result && result.results && result.results.length === 0 && (
+        <div className="py-4 text-sm text-[var(--text-muted)]">
+          Aucun titre de cet univers n'améliore le portefeuille sur la période analysée.
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function ScreenRow({ rank, c }: { rank: number; c: ScreenCandidate }) {
+  return (
+    <tr className="border-t border-white/5 hover:bg-white/5">
+      <td className="py-1.5 pr-3 text-[var(--text-muted)]">{rank}</td>
+      <td className="pr-3">
+        <Link to={`/security/${encodeURIComponent(c.symbol)}`} className="font-medium hover:text-[var(--series-1)] hover:underline">
+          {c.symbol}
+        </Link>
+      </td>
+      <td className="px-2 text-xs text-[var(--text-muted)]">{c.market}</td>
+      <td className="px-2 text-right tabular" style={{ color: "var(--status-good)" }}>{pct(c.residual_alpha)}</td>
+      <td className="px-2 text-right tabular font-medium">{num(c.information_ratio)}</td>
+      <td className="px-2 text-right tabular" style={{ color: "var(--status-good)" }}>+{c.sharpe_uplift.toFixed(2)}</td>
+      <td className="px-2 text-right tabular">{num(c.new_portfolio_sharpe)}</td>
+      <td className="px-2 text-right tabular" style={{ color: Math.abs(c.correlation) < 0.3 ? "var(--status-good)" : undefined }}>
+        {num(c.correlation)}
+      </td>
+      <td className="px-2 text-right tabular">{num(c.beta_to_portfolio)}</td>
+      <td className="px-2 text-right tabular" style={{ color: c.ann_return >= 0 ? "var(--status-good)" : "var(--status-critical)" }}>
+        {pct(c.ann_return)}
+      </td>
+      <td className="px-2 text-right tabular">{pct(c.ann_vol)}</td>
+    </tr>
   );
 }
 

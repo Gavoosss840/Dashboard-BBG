@@ -7,7 +7,7 @@ from app import models, schemas
 from app.database import get_db
 from app.deps import fx_rates, target_currency
 from app.utils import today
-from app.services import pnl, portfolio_analytics
+from app.services import pnl, portfolio_analytics, screener
 
 router = APIRouter(prefix="/api/portfolios", tags=["portfolios"])
 
@@ -197,6 +197,22 @@ def portfolio_analytics_endpoint(
     expected return, volatility, Sharpe/Sortino, beta/alpha, VaR, the efficient
     frontier, the Capital Market Line and the Security Market Line."""
     return portfolio_analytics.analyze_portfolio(db, portfolio_id, period, ccy, rates, benchmark)
+
+
+@router.get("/{portfolio_id}/screen")
+def portfolio_screen_endpoint(
+    portfolio_id: int,
+    universe: str = "SP500",
+    period: str = "1y",
+    limit: int = 25,
+    db: Session = Depends(get_db),
+    ccy: str = Depends(target_currency),
+    rates: dict = Depends(fx_rates),
+):
+    """Scan a regional universe (NASDAQ, SP500, EUROPE, ASIA) for tickers that
+    would improve this portfolio on the efficient frontier, ranked by residual
+    alpha (Treynor-Black appraisal ratio vs the current book)."""
+    return screener.screen_portfolio(db, portfolio_id, universe, period, ccy, rates, limit)
 
 
 @router.get("/{portfolio_id}/trades", response_model=list[schemas.TradeOut])
