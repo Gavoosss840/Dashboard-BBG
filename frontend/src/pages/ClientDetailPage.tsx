@@ -503,6 +503,13 @@ export function ClientDetailPage() {
           action={
             <div className="flex items-center gap-2">
               <MetricColumnPicker tableKey="positions" selected={posMetricCols} onChange={setPosMetricCols} />
+              <Link
+                to={`/portfolio/${p.id}/analytics`}
+                className="rounded border border-white/10 px-2 py-1 text-xs text-[var(--text-secondary)] hover:border-[var(--series-1)] hover:text-[var(--series-1)]"
+                title="Analyse quantitative : frontière efficiente, CML, SML, VaR…"
+              >
+                📊 Analyse quant
+              </Link>
               <button
                 onClick={() => setModal({ type: "newPosition", portfolioId: p.id })}
                 className="rounded border border-white/10 px-2 py-1 text-xs text-[var(--text-secondary)] hover:border-[var(--series-1)] hover:text-[var(--series-1)]"

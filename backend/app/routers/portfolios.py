@@ -7,7 +7,7 @@ from app import models, schemas
 from app.database import get_db
 from app.deps import fx_rates, target_currency
 from app.utils import today
-from app.services import pnl
+from app.services import pnl, portfolio_analytics
 
 router = APIRouter(prefix="/api/portfolios", tags=["portfolios"])
 
@@ -182,6 +182,21 @@ def delete_position(position_id: int, db: Session = Depends(get_db)):
     db.delete(position)
     db.commit()
     return {"ok": True}
+
+
+@router.get("/{portfolio_id}/analytics")
+def portfolio_analytics_endpoint(
+    portfolio_id: int,
+    period: str = "1y",
+    benchmark: str = "^GSPC",
+    db: Session = Depends(get_db),
+    ccy: str = Depends(target_currency),
+    rates: dict = Depends(fx_rates),
+):
+    """Mean-variance analytics computed from the holdings' real price history:
+    expected return, volatility, Sharpe/Sortino, beta/alpha, VaR, the efficient
+    frontier, the Capital Market Line and the Security Market Line."""
+    return portfolio_analytics.analyze_portfolio(db, portfolio_id, period, ccy, rates, benchmark)
 
 
 @router.get("/{portfolio_id}/trades", response_model=list[schemas.TradeOut])

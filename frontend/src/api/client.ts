@@ -25,6 +25,7 @@ import type {
   MandateInput,
   NewsItem,
   Portfolio,
+  PortfolioAnalytics,
   PortfolioInput,
   PortfolioReport,
   Position,
@@ -245,6 +246,10 @@ export const api = {
   fxCurrencies: () => request<string[]>(`/api/fx/currencies`),
 
   portfolioTrades: (portfolioId: number) => request<Trade[]>(`/api/portfolios/${portfolioId}/trades`),
+  portfolioAnalytics: (portfolioId: number, ccy: string, period = "1y", benchmark = "^GSPC") =>
+    request<PortfolioAnalytics>(
+      `/api/portfolios/${portfolioId}/analytics?ccy=${ccy}&period=${period}&benchmark=${encodeURIComponent(benchmark)}`
+    ),
 
   syncStatus: () => request<SyncStatus>(`/api/sync/status`),
   triggerIbkrSync: () => request<SyncLog>(`/api/sync/ibkr`, { method: "POST" }),

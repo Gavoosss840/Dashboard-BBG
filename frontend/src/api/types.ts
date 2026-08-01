@@ -787,6 +787,80 @@ export interface MomentumSignal {
   legs: { key: string; score: number; weight: number }[];
 }
 
+export interface AnalyticsAsset {
+  symbol: string;
+  name: string;
+  sector: string;
+  weight: number;
+  market_value: number;
+  ann_return: number;
+  ann_vol: number;
+  beta: number | null;
+  alpha: number | null;
+  sharpe: number | null;
+  capm_expected: number | null;
+  mispricing: number | null;
+  corr_to_portfolio: number;
+  risk_contribution: number;
+}
+
+export interface PortfolioAnalytics {
+  ok: boolean;
+  error?: string;
+  label?: string;
+  currency?: string;
+  period?: string;
+  benchmark?: string;
+  as_of?: string;
+  observations?: number;
+  risk_free?: number;
+  portfolio?: {
+    expected_return: number;
+    annualised_return: number;
+    annualised_vol: number;
+    sharpe: number | null;
+    sortino: number | null;
+    max_drawdown: number;
+    beta: number | null;
+    alpha: number | null;
+    treynor: number | null;
+    var_95: number;
+    cvar_95: number;
+    var_99: number;
+    cvar_99: number;
+    skew: number;
+    excess_kurtosis: number;
+    tracking_error: number;
+    information_ratio: number | null;
+    up_capture: number | null;
+    down_capture: number | null;
+    diversification_ratio: number | null;
+    effective_bets: number | null;
+    net_exposure: number;
+    gross_exposure: number;
+  };
+  benchmark_stats?: {
+    annualised_return: number;
+    annualised_vol: number;
+    sharpe: number | null;
+  };
+  assets?: AnalyticsAsset[];
+  frontier?: {
+    points: { vol: number; ret: number }[];
+    gmv: { ret: number; vol: number; allocation: Record<string, number> };
+    tangency: { ret: number; vol: number; sharpe: number; allocation: Record<string, number> } | null;
+  } | null;
+  current_point?: { vol: number; ret: number } | null;
+  cml?: { slope: number; points: { vol: number; ret: number }[] } | null;
+  sml?: {
+    risk_free: number;
+    market_return: number;
+    points: { beta: number; ret: number }[];
+  } | null;
+  correlation?: { symbols: string[]; matrix: number[][] };
+  skipped?: { ticker: string; reason: string; market_value: number }[];
+}
+
 export interface SecurityNote {
   id: number;
   symbol: string;

@@ -6,6 +6,7 @@ import { ClientsPage } from "./pages/ClientsPage";
 import { ClientDetailPage } from "./pages/ClientDetailPage";
 import { ReportBuilderPage } from "./pages/ReportBuilderPage";
 import { PortfolioPage } from "./pages/PortfolioPage";
+import { PortfolioAnalyticsPage } from "./pages/PortfolioAnalyticsPage";
 import { FinancierPage } from "./pages/FinancierPage";
 import { CompliancePage } from "./pages/CompliancePage";
 import { MandatesPage } from "./pages/MandatesPage";
@@ -46,6 +47,7 @@ function App() {
         <Route path="/clients/:id" element={<ClientDetailPage />} />
         <Route path="/reports" element={<ReportBuilderPage />} />
         <Route path="/portfolio" element={<PortfolioPage />} />
+        <Route path="/portfolio/:id/analytics" element={<PortfolioAnalyticsPage />} />
         <Route path="/financier" element={<FinancierPage />} />
         <Route path="/compliance" element={<CompliancePage />} />
         <Route path="/mandates" element={<MandatesPage />} />
