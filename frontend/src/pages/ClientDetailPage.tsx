@@ -235,6 +235,14 @@ export function ClientDetailPage() {
         <StatTile
           label="P&L Since Inception"
           value={<PnlValue amount={data.pnl_since_inception} ccy={currency} compact />}
+          // Gain per euro paid in — the ratio you get doing the arithmetic by
+          // hand. It differs from the TWR below, which neutralises WHEN the
+          // money arrived; both are right, they answer different questions.
+          sub={
+            data.net_deposits > 0
+              ? `${formatPct((data.pnl_since_inception / data.net_deposits) * 100)} des dépôts nets`
+              : undefined
+          }
           tone={data.pnl_since_inception >= 0 ? "good" : "critical"}
         />
       </div>
