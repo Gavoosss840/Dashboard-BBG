@@ -221,14 +221,21 @@ export function ReportBuilderPage() {
                     </div>
                   )}
                   {report && report.nav_series.length > 0 && <NavChart data={report.nav_series} ccy={currency} />}
-                  {report && report.included.some((i) => i.modeled) && (
+                  {report && report.modeled_removals?.length > 0 && (
                     <div className="mt-2 text-xs text-[var(--text-muted)]">
-                      Option(s) modélisée(s) Black-76 : {report.included.filter((i) => i.modeled).map((i) => i.ticker).join(", ")}.
+                      Retrait modélisé Black-76 : {report.modeled_removals.map((i) => i.ticker).join(", ")}.
                     </div>
                   )}
                   {report && report.skipped.length > 0 && (
-                    <div className="mt-1 text-xs text-[var(--text-muted)]">
-                      Hors calcul : {report.skipped.map((s) => `${s.ticker} (${s.reason})`).join(", ")}.
+                    <div className="mt-1 text-xs text-[var(--status-warning)]">
+                      Non retiré(s) de la courbe : {report.skipped.map((s) => `${s.ticker} (${s.reason})`).join(", ")}.
+                    </div>
+                  )}
+                  {report && (
+                    <div className="mt-1 text-[10px] text-[var(--text-muted)]">
+                      {report.basis === "real"
+                        ? "NAV réelle du compte IBKR moins la contribution en P&L des lignes décochées — performance pondérée dans le temps (hors dépôts/retraits)."
+                        : "Portefeuille sans NAV synchronisée : simulation aux quantités actuelles, pas la performance réelle du compte."}
                     </div>
                   )}
                 </>

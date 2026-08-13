@@ -142,10 +142,15 @@ export interface ReportMetrics {
 export interface PortfolioReport {
   period: string;
   currency: string;
+  /** "real" = anchored on the official IBKR NAV history; "simulation" = price
+   *  history at today's quantities (books that were never synced). */
+  basis: "real" | "simulation";
   nav_series: NavPoint[];
   metrics: ReportMetrics | null;
   included: { id: number; ticker: string; name: string; value: number; weight: number; modeled?: boolean }[];
   skipped: { id: number; ticker: string; name: string; reason: string }[];
+  /** Deselected options removed from the curve via the Black-76 model. */
+  modeled_removals: { ticker: string; name: string }[];
 }
 
 export interface CashBalance {

@@ -72,7 +72,27 @@ export function PortfolioReportCard({ positions }: { positions: Position[] }) {
 
   return (
     <Card
-      title="Rapport de performance (sélection)"
+      title={
+        <span className="flex items-center gap-2">
+          Rapport de performance (sélection)
+          {report && (
+            <span
+              className={`rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${
+                report.basis === "real"
+                  ? "bg-[var(--status-good)]/15 text-[var(--status-good)]"
+                  : "bg-[var(--status-warning)]/15 text-[var(--status-warning)]"
+              }`}
+              title={
+                report.basis === "real"
+                  ? "Ancré sur la NAV réelle du compte IBKR, net des dépôts/retraits"
+                  : "Aucun historique de NAV synchronisé : simulation aux quantités actuelles"
+              }
+            >
+              {report.basis === "real" ? "compte réel" : "simulation"}
+            </span>
+          )}
+        </span>
+      }
       className="mt-4"
       action={
         <div className="flex gap-1">
@@ -134,22 +154,33 @@ export function PortfolioReportCard({ positions }: { positions: Position[] }) {
                 <div className="mb-3 text-sm text-[var(--text-muted)]">Historique insuffisant pour les métriques.</div>
               )}
               <NavChart data={report.nav_series} ccy={report.currency} />
-              {report.included.some((i) => i.modeled) && (
+              {report.modeled_removals?.length > 0 && (
                 <div className="mt-2 text-xs text-[var(--text-muted)]">
-                  <span className="rounded bg-[var(--series-1)]/15 px-1 text-[var(--series-1)]">modélisé (Black-76)</span>{" "}
-                  {report.included.filter((i) => i.modeled).map((i) => i.ticker).join(", ")} — valeur d'option reconstruite
-                  depuis le sous-jacent réel (pas de prix d'option historique gratuit).
+                  <span className="rounded bg-[var(--series-1)]/15 px-1 text-[var(--series-1)]">retrait modélisé</span>{" "}
+                  {report.modeled_removals.map((i) => i.ticker).join(", ")} — option retirée de la courbe via Black-76 sur
+                  le sous-jacent réel, volatilité calée sur le prix d'entrée et le mark actuel.
                 </div>
               )}
               {report.skipped.length > 0 && (
-                <div className="mt-2 text-xs text-[var(--text-muted)]">
-                  Exclu(s) du calcul :{" "}
+                <div className="mt-2 text-xs text-[var(--status-warning)]">
+                  Non retiré(s) de la courbe :{" "}
                   {report.skipped.map((s) => `${s.ticker} (${s.reason})`).join(", ")}.
                 </div>
               )}
               <div className="mt-1 text-[10px] text-[var(--text-muted)]">
-                Simulation à partir des prix historiques quotidiens (Yahoo / Black-76 pour les options) et des quantités
-                actuelles — Sharpe/Sortino avec taux sans risque à 0.
+                {report.basis === "real" ? (
+                  <>
+                    NAV réelle du compte IBKR, diminuée de la contribution en P&amp;L des lignes décochées (quantités
+                    rejouées depuis le blotter, prix réels). Performance pondérée dans le temps : les dépôts et retraits
+                    déplacent la NAV sans jamais compter comme performance. Sharpe/Sortino avec taux sans risque à 4 %.
+                  </>
+                ) : (
+                  <>
+                    Portefeuille sans historique de NAV synchronisé : <strong>simulation</strong> à partir des prix
+                    historiques quotidiens aux quantités actuelles — « comment se serait comporté ce que je détiens
+                    aujourd'hui », pas la performance réelle du compte. Taux sans risque à 4 %.
+                  </>
+                )}
               </div>
             </>
           )}

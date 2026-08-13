@@ -4,22 +4,22 @@ The user ticks the positions to include; the report recomputes NAV, return,
 volatility, Sharpe, Sortino and max drawdown on that selection only — so a book
 can be analysed with or without any given line.
 
-Method (honest, nothing fabricated): each selected position's value is
-simulated day by day from its real daily price history (Yahoo, via the mapped
-data_symbol) times the quantity currently held, converted to the display
-currency. Summing those gives a reconstructed NAV series for the selection, and
-every risk/return metric is derived from that series' daily returns. It is a
-"current-holdings historical simulation" — it answers "how would the book I hold
-today have behaved", so it assumes today's quantities across the window rather
-than replaying every past trade. A position whose price history isn't available
-(typically options) can't be simulated and is reported as skipped, never guessed.
+Method (honest, nothing fabricated). The report is anchored on the REAL account:
+it starts from the official IBKR NAV history and subtracts the P&L contribution
+of the lines the user deselected — quantities replayed from the trade blotter,
+prices from real daily history — so what remains is the actual account as it
+would have been holding only the chosen names. Returns are then taken net of
+deposits and withdrawals (time-weighted), because money paid in is not
+performance. Books with no NAV history (hand-entered, never synced) have no real
+curve to anchor on and fall back to a price-history simulation at today's
+quantities, flagged basis "simulation" so it is never read as the real account.
 """
 
 from __future__ import annotations
 
 import datetime as dt
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app import models
 from app.services import fx, options, pnl, securities
@@ -80,6 +80,77 @@ def _option_price_series(pos: models.Position, range_key: str) -> dict[dt.date, 
     return out or None
 
 
+def _entry_trade(db: Session, portfolio_id: int, ticker: str) -> tuple[dt.date, float] | None:
+    """Date and price of the first execution on a ticker (the opening trade)."""
+    row = (
+        db.query(models.Trade.trade_date, models.Trade.price)
+        .filter(models.Trade.portfolio_id == portfolio_id, models.Trade.ticker == ticker)
+        .order_by(models.Trade.trade_date, models.Trade.id)
+        .first()
+    )
+    return (row[0], row[1]) if row else None
+
+
+def _option_price_series_pinned(
+    db: Session, portfolio_id: int, pos: models.Position, range_key: str
+) -> dict[dt.date, float] | None:
+    """Per-unit Black-76 price path for an option, with the vol pinned to BOTH
+    the opening trade price and today's mark.
+
+    A vol calibrated on today's price alone drifts badly at the far end of the
+    window — it can value a now-worthless option at several times what was
+    actually paid for it months earlier. Interpolating the vol linearly in time
+    between the two observed prices forces the modelled path through both, so
+    removing the line from the historical NAV introduces no jump at either end.
+    That endpoint consistency is precisely what the NAV adjustment needs; the
+    path in between is modelled, and reported as such.
+    """
+    if not (pos.opt_strike and pos.opt_expiry and pos.opt_right and pos.underlying_symbol):
+        return None
+    yahoo_und = options.yahoo_underlying(pos.underlying_symbol)
+    if not yahoo_und:
+        return None
+    und = _daily_closes(yahoo_und, range_key)
+    if not und:
+        return None
+
+    K, right, expiry = pos.opt_strike, pos.opt_right, pos.opt_expiry
+    und_dates = sorted(und)
+    last_d = und_dates[-1]
+
+    def _t(d: dt.date) -> float:
+        return max((expiry - d).days, 1) / 365.0
+
+    sigma_now = options.implied_vol(pos.last_price, und[last_d], K, _t(last_d), RISK_FREE, right)
+
+    sigma_entry = None
+    entry = _entry_trade(db, portfolio_id, pos.ticker)
+    entry_d = None
+    if entry:
+        entry_d, entry_price = entry
+        f_entry = _price_on(und_dates, und, entry_d)
+        if f_entry is not None and entry_price > 0:
+            sigma_entry = options.implied_vol(entry_price, f_entry, K, _t(entry_d), RISK_FREE, right)
+
+    if sigma_now is None and sigma_entry is None:
+        return None
+    if sigma_now is None:
+        sigma_now = sigma_entry
+    if sigma_entry is None or entry_d is None or entry_d >= last_d:
+        sigma_entry, entry_d = sigma_now, und_dates[0]
+
+    span = (last_d - entry_d).days or 1
+    out: dict[dt.date, float] = {}
+    for d in und_dates:
+        t = (expiry - d).days / 365.0
+        if t <= 0:
+            continue
+        w = min(1.0, max(0.0, (d - entry_d).days / span))
+        sigma = sigma_entry + w * (sigma_now - sigma_entry)
+        out[d] = options.black76(und[d], K, t, sigma, RISK_FREE, right)
+    return out or None
+
+
 def _option_value_series(
     pos: models.Position, range_key: str, cutoff: dt.date, target_ccy: str, rates: dict
 ) -> dict[dt.date, float] | None:
@@ -115,8 +186,20 @@ def build_report(
     period: str,
     target_ccy: str,
 ) -> dict:
+    """Report on a selection of positions, anchored on the REAL account.
+
+    The curve starts from the official IBKR NAV history and strips the P&L
+    contribution of the lines the user deselected, so what remains is the real
+    account as it would have been holding only the chosen names. Returns are
+    then taken net of deposits/withdrawals (time-weighted): a book that doubled
+    because money was paid in has not performed, and reading raw NAV changes as
+    performance is what made the old figures wildly optimistic.
+
+    Portfolios with no NAV history (hand-entered, never synced) have no real
+    curve to anchor on and fall back to the price-history simulation, flagged
+    as such.
+    """
     rates = fx.get_rates(db)
-    range_key = PERIOD_RANGES.get(period, "1y")
     today = dt.date.today()
     cutoff = _cutoff(period, today)
 
@@ -124,6 +207,169 @@ def build_report(
         db.query(models.Position).filter(models.Position.id.in_(position_ids)).all()
         if position_ids else []
     )
+    if not positions:
+        return {
+            "period": period, "currency": target_ccy, "basis": "real",
+            "nav_series": [], "metrics": None, "included": [], "skipped": [],
+            "modeled_removals": [],
+        }
+
+    selected_ids = {p.id for p in positions}
+    portfolios = (
+        db.query(models.Portfolio)
+        .options(
+            selectinload(models.Portfolio.positions),
+            selectinload(models.Portfolio.nav_history),
+        )
+        .filter(models.Portfolio.id.in_({p.portfolio_id for p in positions}))
+        .all()
+    )
+
+    # Current value of the selection, from live marks (used for the weights).
+    included = [
+        {
+            "id": pos.id, "ticker": pos.ticker, "name": pos.name,
+            "value": fx.convert(
+                pos.quantity * pos.last_price * (pos.multiplier or 1.0),
+                pos.currency, target_ccy, rates,
+            ),
+            "modeled": False,
+        }
+        for pos in positions
+    ]
+    total_value = sum(i["value"] for i in included)
+    for i in included:
+        i["weight"] = (i["value"] / total_value) if total_value else 0.0
+
+    if not portfolios or not all(pf.nav_history for pf in portfolios):
+        return _simulated_report(db, positions, period, target_ccy, rates)
+
+    combined: dict[dt.date, float] = {}
+    unadjustable: list[models.Position] = []
+    modeled_removals: list[dict] = []
+    for pf in portfolios:
+        dropped = [p for p in pf.positions if p.id not in selected_ids]
+        adj, missed = _excluded_pnl_by_date(
+            db, pf, pf.base_currency, rates, {p.id for p in dropped}
+        )
+        unadjustable.extend(missed)
+        missed_ids = {p.id for p in missed}
+        modeled_removals.extend(
+            {"ticker": p.ticker, "name": p.name}
+            for p in dropped
+            if p.id not in missed_ids and (p.asset_class in ("option", "future") or p.opt_right)
+        )
+        for h in pf.nav_history:
+            if h.date < cutoff:
+                continue
+            nav_base = h.nav - adj.get(h.date, 0.0)
+            combined[h.date] = combined.get(h.date, 0.0) + fx.convert(
+                nav_base, pf.base_currency, target_ccy, rates
+            )
+
+    all_dates = sorted(combined)
+    navs = [combined[d] for d in all_dates]
+    if len(all_dates) < 3:
+        return _simulated_report(db, positions, period, target_ccy, rates)
+
+    clients = {pf.client for pf in portfolios if pf.client}
+    rets = _flow_adjusted_returns(all_dates, navs, clients, rates, target_ccy)
+
+    return {
+        "period": period, "currency": target_ccy, "basis": "real",
+        "nav_series": [
+            {"date": d.isoformat(), "nav": round(v, 2)} for d, v in zip(all_dates, navs)
+        ],
+        "metrics": _metrics_from_returns(rets, navs),
+        "included": sorted(included, key=lambda x: x["value"], reverse=True),
+        "skipped": [
+            {"id": p.id, "ticker": p.ticker, "name": p.name,
+             "reason": "pas d'historique exploitable — laissée dans la courbe"}
+            for p in unadjustable
+        ],
+        "modeled_removals": modeled_removals,
+    }
+
+
+def _flow_adjusted_returns(
+    all_dates: list[dt.date], navs: list[float], clients, rates: dict, ccy: str,
+) -> list[float]:
+    """Daily time-weighted returns: r_i = NAV_i / (NAV_{i-1} + flows_i) − 1, so
+    deposits and withdrawals move the NAV without ever counting as performance."""
+    rets: list[float] = []
+    for i in range(1, len(all_dates)):
+        flows = sum(
+            pnl._client_flows(
+                c, rates, ccy,
+                start=all_dates[i - 1] + dt.timedelta(days=1), end=all_dates[i],
+            )
+            for c in clients
+        )
+        denom = navs[i - 1] + flows
+        if denom <= 0:
+            continue
+        rets.append(navs[i] / denom - 1.0)
+    return rets
+
+
+def _metrics_from_returns(rets: list[float], navs: list[float]) -> dict | None:
+    """Risk/return metrics from time-weighted daily returns. Drawdown is measured
+    on the compounded return index, not on raw NAV — a withdrawal is not a loss."""
+    if len(rets) < 2:
+        return None
+    n = len(rets)
+    growth = 1.0
+    peak = 1.0
+    max_dd = 0.0
+    for r in rets:
+        growth *= 1 + r
+        peak = max(peak, growth)
+        if peak > 0:
+            max_dd = min(max_dd, growth / peak - 1.0)
+    total_return = growth - 1.0
+    ann_return = ((1 + total_return) ** (TRADING_DAYS / n) - 1) if total_return > -1 else -1.0
+
+    mean = sum(rets) / n
+    var = sum((r - mean) ** 2 for r in rets) / (n - 1)
+    vol_daily = var ** 0.5
+    rf_daily = RISK_FREE / TRADING_DAYS
+    sharpe = ((mean - rf_daily) / vol_daily) * (TRADING_DAYS ** 0.5) if vol_daily > 0 else None
+    downside = [r - rf_daily for r in rets if r < rf_daily]
+    sortino = None
+    if downside:
+        dstd = (sum(d * d for d in downside) / len(downside)) ** 0.5
+        if dstd > 0:
+            sortino = ((mean - rf_daily) / dstd) * (TRADING_DAYS ** 0.5)
+
+    return {
+        "start_nav": round(navs[0], 2),
+        "end_nav": round(navs[-1], 2),
+        "total_return": total_return,
+        "annualised_return": ann_return,
+        "annualised_vol": vol_daily * (TRADING_DAYS ** 0.5),
+        "sharpe": sharpe,
+        "sortino": sortino,
+        "max_drawdown": max_dd,
+        "best_day": max(rets),
+        "worst_day": min(rets),
+        "observations": len(navs),
+    }
+
+
+def _simulated_report(
+    db: Session,
+    positions: list[models.Position],
+    period: str,
+    target_ccy: str,
+    rates: dict,
+) -> dict:
+    """Fallback for books with no real NAV history: simulate each line's value
+    from its price history at TODAY'S quantities. Answers "how would what I hold
+    now have behaved", not "what did this account do" — flagged basis
+    "simulation" so the UI never presents it as the real account."""
+    range_key = PERIOD_RANGES.get(period, "1y")
+    today = dt.date.today()
+    cutoff = _cutoff(period, today)
 
     included: list[dict] = []
     skipped: list[dict] = []
@@ -170,9 +416,9 @@ def build_report(
 
     if not series_by_pos:
         return {
-            "period": period, "currency": target_ccy,
+            "period": period, "currency": target_ccy, "basis": "simulation",
             "nav_series": [], "metrics": None,
-            "included": included, "skipped": skipped,
+            "included": included, "skipped": skipped, "modeled_removals": [],
         }
 
     total_value = sum(i["value"] for i in included)
@@ -216,58 +462,16 @@ def build_report(
     scale = (total_value / navs[-1]) if navs[-1] else 1.0
     nav_series = [{"date": labels[i].isoformat(), "nav": round(navs[i] * scale, 2)} for i in range(len(navs))]
 
-    metrics = _metrics(nav_series)
+    # No cash flows to strip here: the series is a pure price-driven simulation
+    # of a fixed holding, so its NAV changes ARE its returns.
+    scaled = [p["nav"] for p in nav_series]
+    rets = [scaled[i] / scaled[i - 1] - 1.0 for i in range(1, len(scaled)) if scaled[i - 1] > 0]
 
     return {
-        "period": period, "currency": target_ccy,
-        "nav_series": nav_series, "metrics": metrics,
+        "period": period, "currency": target_ccy, "basis": "simulation",
+        "nav_series": nav_series, "metrics": _metrics_from_returns(rets, scaled),
         "included": sorted(included, key=lambda x: x["value"], reverse=True),
-        "skipped": skipped,
-    }
-
-
-def _metrics(nav_series: list[dict]) -> dict | None:
-    navs = [p["nav"] for p in nav_series]
-    if len(navs) < 3:
-        return None
-    rets = [navs[i] / navs[i - 1] - 1.0 for i in range(1, len(navs)) if navs[i - 1] > 0]
-    if len(rets) < 2:
-        return None
-    n = len(rets)
-    mean = sum(rets) / n
-    var = sum((r - mean) ** 2 for r in rets) / (n - 1)
-    vol_daily = var ** 0.5
-    ann_vol = vol_daily * (TRADING_DAYS ** 0.5)
-    ann_return = (1 + mean) ** TRADING_DAYS - 1
-    total_return = navs[-1] / navs[0] - 1.0
-    sharpe = (mean / vol_daily) * (TRADING_DAYS ** 0.5) if vol_daily > 0 else None
-    downside = [r for r in rets if r < 0]
-    if downside:
-        dvar = sum(r * r for r in downside) / len(downside)
-        dstd = dvar ** 0.5
-        sortino = (mean / dstd) * (TRADING_DAYS ** 0.5) if dstd > 0 else None
-    else:
-        sortino = None
-    # Max drawdown on the NAV path.
-    peak = navs[0]
-    max_dd = 0.0
-    for v in navs:
-        peak = max(peak, v)
-        if peak > 0:
-            max_dd = min(max_dd, v / peak - 1.0)
-
-    return {
-        "start_nav": round(navs[0], 2),
-        "end_nav": round(navs[-1], 2),
-        "total_return": total_return,
-        "annualised_return": ann_return,
-        "annualised_vol": ann_vol,
-        "sharpe": sharpe,
-        "sortino": sortino,
-        "max_drawdown": max_dd,
-        "best_day": max(rets),
-        "worst_day": min(rets),
-        "observations": len(navs),
+        "skipped": skipped, "modeled_removals": [],
     }
 
 
@@ -294,6 +498,15 @@ def _cum_qty_steps(db: Session, portfolio_id: int, ticker: str) -> list[tuple[dt
     return steps
 
 
+def _portfolio_has_trades(db: Session, portfolio_id: int) -> bool:
+    return (
+        db.query(models.Trade.id)
+        .filter(models.Trade.portfolio_id == portfolio_id)
+        .first()
+        is not None
+    )
+
+
 def _qty_on(steps: list[tuple[dt.date, float]], d: dt.date, fallback: float) -> float:
     """Quantity held on date d (0 before the first trade). Falls back to the
     current quantity when there is no trade history for the name."""
@@ -317,40 +530,65 @@ def _price_on(sorted_dates: list[dt.date], prices: dict[dt.date, float], d: dt.d
     return prices[sorted_dates[i]] if i >= 0 else None
 
 
+def _position_pnl_series(
+    db: Session, portfolio: models.Portfolio, pos: models.Position,
+    nav_dates: list[dt.date], base_ccy: str, rates: dict,
+) -> dict[dt.date, float] | None:
+    """Unrealised P&L of ONE position on each NAV date, in the portfolio's base
+    currency — the amount to strip from the official NAV to drop that line.
+
+    Quantities come from the trade blotter (0 before the opening trade), prices
+    from the real daily history; options are priced with the endpoint-pinned
+    Black-76 path. None when the line can't be valued historically at all, so
+    the caller can report it rather than silently leaving the curve untouched.
+    """
+    steps = _cum_qty_steps(db, portfolio.id, pos.ticker)
+    if not steps and _portfolio_has_trades(db, portfolio.id):
+        # The blotter covers this book but not this line, so there is no honest
+        # way to date the opening. Assuming it was held for the whole window
+        # would back-date the P&L to before the position existed and wreck the
+        # early NAV — report it instead of guessing.
+        return None
+
+    if pos.asset_class in ("option", "future") or pos.opt_right:
+        prices = _option_price_series_pinned(db, portfolio.id, pos, "5y")
+    else:
+        symbol = pos.data_symbol or pos.ticker
+        prices = _daily_closes(symbol, "5y") if symbol else {}
+    if not prices:
+        return None
+
+    sorted_pd = sorted(prices)
+    mult = pos.multiplier or 1.0
+    fx1 = fx.convert(1.0, pos.currency, base_ccy, rates)
+    out: dict[dt.date, float] = {}
+    for d in nav_dates:
+        qty = _qty_on(steps, d, pos.quantity)
+        price = _price_on(sorted_pd, prices, d) if qty else None
+        out[d] = qty * (price - pos.avg_cost) * mult * fx1 if price is not None else 0.0
+    return out
+
+
 def _excluded_pnl_by_date(
     db: Session, portfolio: models.Portfolio, base_ccy: str, rates: dict, position_ids: set[int]
-) -> dict[dt.date, float]:
-    """Total unrealised P&L (in the portfolio's base ccy) of the positions in
-    `position_ids`, on each date the portfolio's NAV history covers. This is the
-    amount to subtract from the official NAV to drop those names."""
+) -> tuple[dict[dt.date, float], list[models.Position]]:
+    """Total unrealised P&L (portfolio base ccy) of `position_ids` on every date
+    the NAV history covers, plus the positions that could NOT be valued
+    historically (left in the curve, and reported to the caller)."""
     targets = [p for p in portfolio.positions if p.id in position_ids]
     nav_dates = sorted({h.date for h in portfolio.nav_history})
-    if not targets or not nav_dates:
-        return {}
     out: dict[dt.date, float] = {d: 0.0 for d in nav_dates}
+    unadjustable: list[models.Position] = []
+    if not targets or not nav_dates:
+        return out, unadjustable
     for pos in targets:
-        # Only adjust the REAL NAV history with REAL prices. Options have no free
-        # historical price (a single-vol Black-76 misprices past dates badly), so
-        # they're dropped from the current figures but left in the historical
-        # curve — flagged to the caller instead of faked.
-        if pos.asset_class in ("option", "future") or pos.opt_right:
+        series = _position_pnl_series(db, portfolio, pos, nav_dates, base_ccy, rates)
+        if series is None:
+            unadjustable.append(pos)
             continue
-        prices = _daily_closes(pos.data_symbol or pos.ticker, "5y")
-        if not prices:
-            continue  # no real history → don't touch the real curve
-        sorted_pd = sorted(prices)
-        steps = _cum_qty_steps(db, portfolio.id, pos.ticker)
-        mult = pos.multiplier or 1.0
-        fx1 = fx.convert(1.0, pos.currency, base_ccy, rates)
-        for d in nav_dates:
-            qty = _qty_on(steps, d, pos.quantity)
-            if qty == 0:
-                continue
-            price = _price_on(sorted_pd, prices, d)
-            if price is None:
-                continue
-            out[d] += qty * (price - pos.avg_cost) * mult * fx1
-    return out
+        for d, v in series.items():
+            out[d] += v
+    return out, unadjustable
 
 
 def _twr_from_combined(
@@ -392,8 +630,10 @@ def client_adjusted_performance(
         return None
     nav_by_portfolio: dict[int, list[dict]] = {}
     combined: dict[dt.date, float] = {}
+    unadjustable: list[models.Position] = []
     for pf in client.portfolios:
-        adj_pnl = _excluded_pnl_by_date(db, pf, pf.base_currency, rates, excluded_ids)
+        adj_pnl, missed = _excluded_pnl_by_date(db, pf, pf.base_currency, rates, excluded_ids)
+        unadjustable.extend(missed)
         rows = sorted(pf.nav_history, key=lambda h: h.date)
         series = []
         for h in rows:
@@ -407,6 +647,25 @@ def client_adjusted_performance(
     year_start = dt.date(as_of.year, 1, 1)
     return {
         "nav_by_portfolio": nav_by_portfolio,
+        # Adjusted NAV at (or last before) 1 Jan — the YTD P&L baseline must come
+        # from the SAME adjusted curve as the current NAV, otherwise the two ends
+        # of the subtraction disagree about which lines the book holds.
+        "nav_at_year_start": _at_or_before(all_dates, combined_navs, year_start),
         "twr_ytd": _twr_from_combined(all_dates, combined_navs, client, rates, target_ccy, year_start),
         "twr_since_inception": _twr_from_combined(all_dates, combined_navs, client, rates, target_ccy, None),
+        "unadjustable": [
+            {"id": p.id, "ticker": p.ticker, "name": p.name} for p in unadjustable
+        ],
     }
+
+
+def _at_or_before(dates: list[dt.date], values: list[float], target: dt.date) -> float | None:
+    """Value on `target`, or the last one before it (0.0 if the series starts
+    after — the book did not exist yet). None when there is no series."""
+    if not dates:
+        return None
+    if target < dates[0]:
+        return 0.0
+    import bisect
+    i = bisect.bisect_right(dates, target) - 1
+    return values[i] if i >= 0 else 0.0

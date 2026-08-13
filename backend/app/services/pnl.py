@@ -16,13 +16,34 @@ def position_unrealized_pnl(pos: models.Position, rates: dict, target_ccy: str) 
     return fx.convert(pnl, pos.currency, target_ccy, rates)
 
 
+def position_cost_basis(pos: models.Position, rates: dict, target_ccy: str) -> float:
+    """What the line cost — i.e. the cash it consumed when it was opened."""
+    cb = pos.avg_cost * pos.quantity * (pos.multiplier or 1.0)
+    return fx.convert(cb, pos.currency, target_ccy, rates)
+
+
 def portfolio_market_value(portfolio: models.Portfolio, rates: dict, target_ccy: str) -> float:
-    # Excluded positions are omitted from every holdings-based total, so the
-    # whole book reads as if they were never held (NAV, P&L, composition...).
-    return sum(
-        position_market_value(p, rates, target_ccy)
-        for p in portfolio.positions if not p.excluded
-    )
+    """Book value used for NAV, with excluded lines read "as if never held".
+
+    Dropping an excluded line outright would silently destroy the capital that
+    bought it: the market value disappears but the cash that paid for it never
+    comes back, so NAV falls by the whole position instead of by its P&L. The
+    honest counterfactual is that the money stayed in cash, so an excluded line
+    contributes its COST BASIS. That makes
+
+        adjusted NAV = official NAV − unrealised P&L of the excluded lines
+
+    which is exactly the adjustment the historical curve applies in
+    reports._excluded_pnl_by_date — current and historical figures now agree.
+    """
+    total = 0.0
+    for p in portfolio.positions:
+        total += (
+            position_cost_basis(p, rates, target_ccy)
+            if p.excluded
+            else position_market_value(p, rates, target_ccy)
+        )
+    return total
 
 
 def portfolio_unrealized_pnl(portfolio: models.Portfolio, rates: dict, target_ccy: str) -> float:

@@ -63,10 +63,12 @@ def _build_client_out(db: Session, client: models.Client, rates: dict, ccy: str)
         portfolios_out.append(p_out)
     out.portfolios = portfolios_out
 
-    # "As if never held": when positions are excluded, rebuild the historical NAV
-    # curve and TWR from the REAL IBKR history minus those positions' real P&L
-    # contribution (equities; options can't be reconstructed from real prices, so
-    # they're dropped from current figures only — see reports.py).
+    # "As if never held": when positions are excluded, every headline figure must
+    # come from the SAME adjusted book — current NAV (pnl.portfolio_market_value
+    # substitutes the excluded lines' cost basis), the historical curve, the YTD
+    # baseline and the TWR. Adjusting only some of them would subtract a NAV that
+    # holds the excluded lines from one that doesn't, and the P&L would be wrong
+    # by exactly those lines' P&L.
     excluded_ids = {pos.id for p in client.portfolios for pos in p.positions if pos.excluded}
     if excluded_ids:
         adj = reports.client_adjusted_performance(db, client, rates, ccy, today(), excluded_ids)
@@ -75,6 +77,17 @@ def _build_client_out(db: Session, client: models.Client, rates: dict, ccy: str)
                 out.twr_ytd = adj["twr_ytd"]
             if adj["twr_since_inception"] is not None:
                 out.twr_since_inception = adj["twr_since_inception"]
+
+            # YTD P&L off the adjusted 1-Jan baseline, net of this year's flows.
+            nav_year_start = adj["nav_at_year_start"]
+            if nav_year_start is not None:
+                year_start = dt.date(today().year, 1, 1)
+                flows_ytd = pnl._client_flows(
+                    client, rates, ccy,
+                    start=year_start + dt.timedelta(days=1), end=today(),
+                )
+                out.pnl_ytd = out.current_nav - nav_year_start - flows_ytd
+
             adj_nav = adj["nav_by_portfolio"]
             for p_out in out.portfolios:
                 pts = adj_nav.get(p_out.id)
