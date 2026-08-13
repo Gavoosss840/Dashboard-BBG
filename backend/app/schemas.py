@@ -160,6 +160,17 @@ class ClientOut(ORMBase):
     pnl_since_inception: float = 0.0
     twr_ytd: float | None = None
     twr_since_inception: float | None = None
+    # Money-weighted return (annualised IRR over the actual cash flows). The TWR
+    # above answers "how did the strategy do"; this one answers "how did MY money
+    # do", which is what you get computing gain over what you paid in — the two
+    # separate whenever contributions are staggered.
+    mwr_since_inception: float | None = None
+    # When lines are excluded, the figures above describe the book AS IF those
+    # lines were never held. These carry the untouched account alongside, so the
+    # impact of the exclusion is readable instead of having to be inferred.
+    excluded_count: int = 0
+    nav_real: float | None = None
+    pnl_since_inception_real: float | None = None
     mandates: list[MandateOut] = []
     portfolios: list[PortfolioOut] = []
 

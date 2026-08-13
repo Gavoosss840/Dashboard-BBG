@@ -225,7 +225,20 @@ export function ClientDetailPage() {
       />
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        <StatTile label="NAV actuelle" value={formatMoney(data.current_nav, currency, { compact: true })} />
+        <StatTile
+          label={data.excluded_count > 0 ? "NAV hors lignes exclues" : "NAV actuelle"}
+          value={formatMoney(data.current_nav, currency, { compact: true })}
+          // With lines excluded the headline NAV is a counterfactual, not the
+          // account balance. Showing the real one next to it makes the impact
+          // of the exclusion readable instead of something to work out by hand.
+          sub={
+            data.excluded_count > 0 && data.nav_real !== null
+              ? `réelle ${formatMoney(data.nav_real, currency, { compact: true })} · impact ${
+                  data.current_nav - data.nav_real >= 0 ? "+" : ""
+                }${formatMoney(data.current_nav - data.nav_real, currency, { compact: true })}`
+              : undefined
+          }
+        />
         <StatTile label="Dépôts nets" value={formatMoney(data.net_deposits, currency, { compact: true })} />
         <StatTile
           label="P&L YTD"
@@ -261,6 +274,30 @@ export function ClientDetailPage() {
             sub="Insensible aux dépôts/retraits"
             tone={data.twr_since_inception !== null ? (data.twr_since_inception >= 0 ? "good" : "critical") : "neutral"}
           />
+          <StatTile
+            label="TIR (money-weighted)"
+            value={data.mwr_since_inception !== null ? formatPct(data.mwr_since_inception * 100) : "—"}
+            sub="Rendement de votre argent, annualisé"
+            tone={data.mwr_since_inception !== null ? (data.mwr_since_inception >= 0 ? "good" : "critical") : "neutral"}
+          />
+          {data.excluded_count > 0 && data.pnl_since_inception_real !== null && (
+            <StatTile
+              label="Impact des exclusions"
+              value={
+                <PnlValue
+                  amount={data.pnl_since_inception - data.pnl_since_inception_real}
+                  ccy={currency}
+                  compact
+                />
+              }
+              sub={`${data.excluded_count} ligne${data.excluded_count > 1 ? "s" : ""} exclue${
+                data.excluded_count > 1 ? "s" : ""
+              } · compte réel ${formatMoney(data.pnl_since_inception_real, currency, { compact: true })}`}
+              tone={
+                data.pnl_since_inception - data.pnl_since_inception_real >= 0 ? "good" : "critical"
+              }
+            />
+          )}
         </div>
       )}
 

@@ -180,6 +180,60 @@ def client_twr(client: models.Client, rates: dict, target_ccy: str,
     return twr - 1.0
 
 
+# ---------- Money-weighted return (IRR) ----------
+
+def money_weighted_return(
+    client: models.Client, rates: dict, target_ccy: str, as_of: dt.date, current_nav: float,
+) -> float | None:
+    """Annualised IRR over the client's actual cash flows, ending on today's NAV.
+
+    Complements the TWR: the TWR deliberately neutralises WHEN money arrived, so
+    it measures the strategy. This measures the investor's own outcome — capital
+    that sat in the book for two months counts for two months, not for a year.
+    The two diverge whenever contributions are staggered, and both are correct.
+
+    None when there are no flows or no sign change (an IRR needs both).
+    """
+    flows = [
+        (
+            cf.date,
+            -_flow_in_ccy(cf, rates, target_ccy) if cf.flow_type == "deposit"
+            else _flow_in_ccy(cf, rates, target_ccy),
+        )
+        for cf in client.cash_flows
+        if cf.date <= as_of
+    ]
+    if not flows:
+        return None
+    flows.sort(key=lambda x: x[0])
+    flows.append((as_of, current_nav))
+    if not (any(a < 0 for _, a in flows) and any(a > 0 for _, a in flows)):
+        return None
+
+    t0 = flows[0][0]
+    span = (as_of - t0).days
+    if span < 30:  # too short to annualise into anything meaningful
+        return None
+
+    def npv(rate: float) -> float:
+        return sum(a / (1 + rate) ** ((d - t0).days / 365.0) for d, a in flows)
+
+    lo, hi = -0.95, 10.0
+    if npv(lo) * npv(hi) > 0:
+        return None
+    for _ in range(200):
+        mid = (lo + hi) / 2
+        if npv(mid) > 0:
+            lo = mid
+        else:
+            hi = mid
+    return (lo + hi) / 2
+
+
+def _flow_in_ccy(cf: models.CashFlow, rates: dict, target_ccy: str) -> float:
+    return fx.convert(cf.amount, cf.currency, target_ccy, rates)
+
+
 # ---------- Aggregates ----------
 
 def client_aggregate(client: models.Client, rates: dict, target_ccy: str, as_of: dt.date) -> dict:

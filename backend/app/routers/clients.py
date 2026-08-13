@@ -7,7 +7,7 @@ from app import models, schemas
 from app.database import get_db
 from app.deps import fx_rates, target_currency
 from app.services import cashflow as cashflow_service
-from app.services import pnl, reports
+from app.services import fx, pnl, reports
 from app.utils import today
 
 router = APIRouter(prefix="/api/clients", tags=["clients"])
@@ -70,6 +70,21 @@ def _build_client_out(db: Session, client: models.Client, rates: dict, ccy: str)
     # holds the excluded lines from one that doesn't, and the P&L would be wrong
     # by exactly those lines' P&L.
     excluded_ids = {pos.id for p in client.portfolios for pos in p.positions if pos.excluded}
+    out.excluded_count = len(excluded_ids)
+    if excluded_ids:
+        # The untouched account, kept alongside: "NAV actuelle" is an as-if
+        # figure once lines are excluded, and without the real one next to it
+        # there is no way to read what the exclusion actually did.
+        real_nav = sum(
+            pnl.position_market_value(pos, rates, ccy)
+            for p in client.portfolios for pos in p.positions
+        ) + sum(pnl.portfolio_cash(p, rates, ccy) for p in client.portfolios)
+        out.nav_real = real_nav
+        contributions = (
+            agg["net_deposits"] if client.cash_flows
+            else sum(fx.convert(p.inception_nav, p.base_currency, ccy, rates) for p in client.portfolios)
+        )
+        out.pnl_since_inception_real = real_nav - contributions
     if excluded_ids:
         adj = reports.client_adjusted_performance(db, client, rates, ccy, today(), excluded_ids)
         if adj:
@@ -96,6 +111,13 @@ def _build_client_out(db: Session, client: models.Client, rates: dict, ccy: str)
                         schemas.NavPointOut(date=dt.date.fromisoformat(pt["date"]), nav=pt["nav"])
                         for pt in pts
                     ]
+
+    # Computed last: it discounts the real flow schedule back from whatever NAV
+    # the page ends up showing, so it must see the adjusted NAV when lines are
+    # excluded.
+    out.mwr_since_inception = pnl.money_weighted_return(
+        client, rates, ccy, today(), out.current_nav
+    )
     return out
 
 

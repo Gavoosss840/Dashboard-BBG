@@ -217,6 +217,14 @@ export interface Client extends ClientSummary {
   total_withdrawals: number;
   twr_ytd: number | null;
   twr_since_inception: number | null;
+  /** Annualised IRR over the real cash flows — "how did MY money do", as
+   *  opposed to the TWR which neutralises when the money arrived. */
+  mwr_since_inception: number | null;
+  /** Number of positions currently excluded; the figures above are then an
+   *  "as if never held" view, and the *_real fields carry the untouched book. */
+  excluded_count: number;
+  nav_real: number | null;
+  pnl_since_inception_real: number | null;
   mandates: Mandate[];
   portfolios: Portfolio[];
 }
